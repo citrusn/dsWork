@@ -1,3 +1,6 @@
 dOPCDAClient.exe
 *.dll*
-sciter/SciterWraper/
+sciter/SciterWraper/*
+*.idb
+*.pdb
+SciterWraper/*
