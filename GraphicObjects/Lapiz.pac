@@ -28,6 +28,7 @@ package globalAliases: (Set new
 package setPrerequisites: (IdentitySet new
 	add: '..\Object Arts\Dolphin\Base\Dolphin';
 	add: '..\Object Arts\Dolphin\MVP\Base\Dolphin MVP Base';
+	add: '..\Object Arts\Dolphin\MVP\Gdiplus\Gdiplus';
 	yourself).
 
 package!
@@ -37,7 +38,7 @@ package!
 Object subclass: #Lapiz
 	instanceVariableNames: 'canvas location direction penDown'
 	classVariableNames: ''
-	poolDictionaries: ''
+	poolDictionaries: 'GdiplusConstants'
 	classInstanceVariableNames: ''!
 Lapiz subclass: #LapizPointRecorder
 	instanceVariableNames: 'points'
@@ -83,8 +84,7 @@ canvas: anObject
 	canvas := anObject!
 
 center
-
-	self goto: canvas extent / 2.!
+	self goto: canvas extent / 2!
 
 direction
 	"Private - Answer the value of the receiver's ''direction'' instance variable."
@@ -116,24 +116,25 @@ go: unInteger
 !
 
 goto: aPoint
-
 	"Move the receiver to position aPoint. If the pen is down, a line will be 
 	drawn from the current position to the new one using the receiver's 
 	direction does not change.
 		From Squeak"
-	| old |
-	old :=  location.
-	location := aPoint.
-	penDown ifTrue: [canvas moveTo: old rounded.
-				canvas lineTo: location rounded.]
 
-!
+	| old  gr|
+	old := location.
+	location := aPoint.
+	penDown ifFalse: [^self].
+	gr := GdiplusGraphics fromCanvas: canvas.
+	gr smoothingMode: SmoothingModeHighQuality.
+	gr drawLineFrom: old rounded to: location rounded pen: (GdiplusPen new width: 3 ).
+	"canvas moveTo: old rounded. canvas lineTo: location rounded"!
 
 initialize
 
 	location := 0@0.
 	direction := 0.
-	penDown  := true.!
+	penDown  := false.!
 
 location
 	"Private - Answer the value of the receiver's ''location'' instance variable."
@@ -146,14 +147,10 @@ location: anObject
 	location := anObject!
 
 penDown
-
-
-	 penDown := true!
+	penDown := true!
 
 penUp
-
-
-	 penDown := false!
+	penDown := false!
 
 regularPolygon: sides size: anInteger
 
@@ -223,15 +220,14 @@ canvas: unCanvas
 
 example
 	"Lapiz 
-	self exampleLapiz
+	self example
 	"
 
 	| lapiz |
-	lapiz := self canvas: (Shell show view
-						showMaximized;
-						canvas).
+	lapiz := self canvas: (Shell show view showMaximized; canvas).
 	lapiz center.
-	3 to: 20 do: [:i | i timesRepeat: 
+	lapiz penDown.
+	3 to: 30  do: [:i | i timesRepeat: 
 					[lapiz go: 20.
 					lapiz turn: 360 / i]]!
 
@@ -240,15 +236,15 @@ new
 
 test
 	"Lapiz 
-		self testa FlipperInspector
+		self test
 	"
 
 	| lapiz |
-	lapiz := self canvas: Shell show view canvas.
+	lapiz := self canvas: Shell show view canvas.	
 	lapiz center.
-	3 to: 20 do: [:i | i timesRepeat: 
-					[lapiz go: 10.
-					lapiz turn: 360 / i]].
+	lapiz penDown.
+	3 to: 20 do: [:i | i timesRepeat:  [lapiz go: 10. lapiz turn: 360 / i]].
+	lapiz regularPolygon: 7 size: 60.
 	^lapiz inspect! !
 !Lapiz class categoriesFor: #canvas:!public! !
 !Lapiz class categoriesFor: #example!public! !

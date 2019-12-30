@@ -14,8 +14,10 @@ sc SciterSetupDebugOutput: nil param: nil pfOutput: cb asParameter.
 
 r := RECT  left: 1 top: 1 width: 600 height: 300.
 
-sc SciterLoadFile: wnd filename: '.\test1.html'.
+sc SciterLoadFile: wnd filename: '.\test1.html'.false
 sc SciterLoadFile: wnd filename: '.\particle.html'.
+
+SCN_LOAD_DATA new
 
 dlg free.
 dlg := nil.

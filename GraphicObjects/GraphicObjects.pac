@@ -104,23 +104,23 @@ package globalAliases: (Set new
 	yourself).
 
 package setPrerequisites: (IdentitySet new
-	add: '..\Object Arts\Dolphin\IDE\Base\Development System';
-	add: '..\Object Arts\Dolphin\Base\Dolphin';
-	add: '..\Object Arts\Dolphin\MVP\Presenters\Choice\Dolphin Choice Presenter';
-	add: '..\Object Arts\Dolphin\MVP\Presenters\Prompters\Dolphin Choice Prompter';
-	add: '..\Object Arts\Dolphin\MVP\Presenters\Color\Dolphin Color Presenter';
-	add: '..\Object Arts\Dolphin\MVP\Dialogs\Common\Dolphin Common Dialogs';
-	add: '..\Object Arts\Dolphin\MVP\Views\Control Bars\Dolphin Control Bars';
-	add: '..\Object Arts\Dolphin\MVP\Base\Dolphin MVP Base';
-	add: '..\Object Arts\Dolphin\MVP\Presenters\Number\Dolphin Number Presenter';
-	add: '..\Object Arts\Dolphin\MVP\Presenters\Prompters\Dolphin Prompter';
-	add: '..\Object Arts\Dolphin\MVP\Views\Scrollbars\Dolphin Scrollbars';
-	add: '..\Object Arts\Dolphin\MVP\Presenters\Text\Dolphin Text Presenter';
-	add: '..\Object Arts\Dolphin\MVP\Models\Tree\Dolphin Tree Models';
-	add: '..\Object Arts\Dolphin\MVP\Presenters\Tree\Dolphin Tree Presenter';
-	add: '..\Object Arts\Dolphin\MVP\Type Converters\Dolphin Type Converters';
-	add: '..\Object Arts\Dolphin\MVP\Models\Value\Dolphin Value Models';
-	add: 'Lapiz';
+	add: '..\..\Object Arts\Dolphin\IDE\Base\Development System';
+	add: '..\..\Object Arts\Dolphin\Base\Dolphin';
+	add: '..\..\Object Arts\Dolphin\MVP\Presenters\Choice\Dolphin Choice Presenter';
+	add: '..\..\Object Arts\Dolphin\MVP\Presenters\Prompters\Dolphin Choice Prompter';
+	add: '..\..\Object Arts\Dolphin\MVP\Presenters\Color\Dolphin Color Presenter';
+	add: '..\..\Object Arts\Dolphin\MVP\Dialogs\Common\Dolphin Common Dialogs';
+	add: '..\..\Object Arts\Dolphin\MVP\Views\Control Bars\Dolphin Control Bars';
+	add: '..\..\Object Arts\Dolphin\MVP\Base\Dolphin MVP Base';
+	add: '..\..\Object Arts\Dolphin\MVP\Presenters\Number\Dolphin Number Presenter';
+	add: '..\..\Object Arts\Dolphin\MVP\Presenters\Prompters\Dolphin Prompter';
+	add: '..\..\Object Arts\Dolphin\MVP\Views\Scrollbars\Dolphin Scrollbars';
+	add: '..\..\Object Arts\Dolphin\MVP\Presenters\Text\Dolphin Text Presenter';
+	add: '..\..\Object Arts\Dolphin\MVP\Models\Tree\Dolphin Tree Models';
+	add: '..\..\Object Arts\Dolphin\MVP\Presenters\Tree\Dolphin Tree Presenter';
+	add: '..\..\Object Arts\Dolphin\MVP\Type Converters\Dolphin Type Converters';
+	add: '..\..\Object Arts\Dolphin\MVP\Models\Value\Dolphin Value Models';
+	add: '..\Lapiz';
 	yourself).
 
 package!
@@ -729,6 +729,7 @@ borderStyle
 
 borderStyle: anObject
 	"Private - Set the value of the receiver's ''borderStyle'' instance variable to the argument, anObject."
+
 	self invalidatePen.
 	borderStyle := anObject!
 
@@ -754,13 +755,9 @@ cachedPen: anObject
 	cachedPen := anObject!
 
 installOn: aCanvas
-
-
 	aCanvas pen: self pen!
 
 invalidatePen
-
-
 	self cachedPen: nil!
 
 oldCanvasState
@@ -781,17 +778,13 @@ pen
 	^cachedPen!
 
 presenterClass
-
-
 	^GraphicObjectPenAttributePresenter!
 
 presentIn: aCompositePresenter
-
-	|presenter|
+	| presenter |
 	presenter := self presenterClass createIn: aCompositePresenter on: self.
-	aCompositePresenter view extent: 0@20 + presenter view extent .
-	presenter view position: 0@0.
-! !
+	aCompositePresenter view extent: 0 @ 20 + presenter view extent.
+	presenter view position: 0 @ 0! !
 !GraphicObjectPenAttribute categoriesFor: #borderColor!accessing!private! !
 !GraphicObjectPenAttribute categoriesFor: #borderColor:!accessing!private! !
 !GraphicObjectPenAttribute categoriesFor: #borderStyle!accessing!private! !
@@ -1035,8 +1028,7 @@ GraphicObjectBrushAttribute comment: ''!
 brush
 	""
 
-	cachedBrush isNil ifTrue:[ self cachedBrush: (Brush  color: fillColor )].
-
+	cachedBrush isNil ifTrue: [self cachedBrush: (Brush color: fillColor)].
 	^cachedBrush!
 
 cachedBrush
@@ -1057,6 +1049,7 @@ fillColor
 
 fillColor: anObject
 	"Private - Set the value of the receiver's ''fillColor'' instance variable to the argument, anObject."
+
 	self invalidateBrush.
 	fillColor := anObject!
 
@@ -1067,8 +1060,8 @@ fillHatch
 
 fillHatch: anObject
 	"Private - Set the value of the receiver's ''fillHatch'' instance variable to the argument, anObject."
-	self invalidateBrush.
 
+	self invalidateBrush.
 	fillHatch := anObject!
 
 fillStyle
@@ -1078,24 +1071,18 @@ fillStyle
 
 fillStyle: anObject
 	"Private - Set the value of the receiver's ''fillStyle'' instance variable to the argument, anObject."
-	self invalidateBrush.
 
+	self invalidateBrush.
 	fillStyle := anObject!
 
 installOn: aCanvas
-
-
 	super installOn: aCanvas.
 	aCanvas brush: self brush!
 
 invalidateBrush
-
-
 	self cachedBrush: nil!
 
 presenterClass
-
-
 	^GraphicObjectBrushAttributePresenter! !
 !GraphicObjectBrushAttribute categoriesFor: #brush!accessing!private! !
 !GraphicObjectBrushAttribute categoriesFor: #cachedBrush!accessing!private! !
@@ -1154,11 +1141,10 @@ font: anObject
 	font := anObject!
 
 installOn: aCanvas
-
-
 	super installOn: aCanvas.
-	aCanvas setTextColor: self textColor ;
-			font: self font.!
+	aCanvas
+		setTextColor: self textColor;
+		font: self font!
 
 isBold
 
@@ -1316,9 +1302,8 @@ borderWidth
 
 	^graphicAttributes borderWidth!
 
-borderWidth:arg1 
-
-	^graphicAttributes borderWidth:arg1 !
+borderWidth: arg1
+	^graphicAttributes borderWidth: arg1!
 
 bottom
 
@@ -1379,11 +1364,7 @@ delete
 	^self parentGraphic remove: self!
 
 drawOn: aCanvas
-
-
-		^graphicAttributes installOn: aCanvas.
-
-!
+	^graphicAttributes installOn: aCanvas!
 
 extent
 
@@ -1404,10 +1385,7 @@ height
 	^self bounds height!
 
 initialize
-
-
-	graphicAttributes := self class defaultGraphicAttributes.
-	!
+	graphicAttributes := self class defaultGraphicAttributes!
 
 invalidate
 
@@ -1571,27 +1549,16 @@ width
 !GraphicObject class methodsFor!
 
 defaultGraphicAttributes
-
-
 	^GraphicObjectPenAttribute default!
 
 new
-
-
 	^super new initialize!
 
 penStyleForStyleName: aSymbol
-
-
-	^(#(solid dot dash dashDot  ) indexOf: aSymbol ) -1
-
-
-!
+	^(#(#solid #dot #dash #dashDot) indexOf: aSymbol) - 1!
 
 test
-
-
-	^ (self  new bounds: ( 10@10 extent: 30) )! !
+	^self new bounds: (10 @ 10 extent: 30)! !
 !GraphicObject class categoriesFor: #defaultGraphicAttributes!public! !
 !GraphicObject class categoriesFor: #new!public! !
 !GraphicObject class categoriesFor: #penStyleForStyleName:!public! !
@@ -2392,32 +2359,23 @@ GraphicEllipse comment: ''!
 !GraphicEllipse methodsFor!
 
 containsPoint: aPoint
-
 	"Robado de Squeak>>EllipseMorph>>containsPoint: "
 
 	| radius other delta xOverY |
-	(bounds containsPoint: aPoint) ifFalse: [^ false].  "quick elimination"
-	(bounds width = 1 or: [bounds height = 1])
-		ifTrue: [^ true].  "Degenerate case -- code below fails by a bit"
-
-	radius :=  bounds height asFloat / 2.
-	other :=  bounds width asFloat / 2.
-	delta :=  aPoint - bounds topLeft - (other@radius).
-	xOverY :=  bounds width asFloat / bounds height asFloat.
-	^ (delta x asFloat / xOverY) squared + delta y squared <= radius squared!
+	(bounds containsPoint: aPoint) ifFalse: [^false].	"quick elimination"
+	(bounds width = 1 or: [bounds height = 1]) ifTrue: [^true].	"Degenerate case -- code below fails by a bit"
+	radius := bounds height asFloat / 2.
+	other := bounds width asFloat / 2.
+	delta := aPoint - bounds topLeft - (other @ radius).
+	xOverY := bounds width asFloat / bounds height asFloat.
+	^(delta x asFloat / xOverY) squared + delta y squared <= radius squared!
 
 drawOn: aCanvas
-
-
 	super drawOn: aCanvas.
-	aCanvas ellipse: self bounds.
-
-!
+	aCanvas ellipse: self bounds!
 
 initialize
-
-	super initialize.
-	! !
+	super initialize! !
 !GraphicEllipse categoriesFor: #containsPoint:!public! !
 !GraphicEllipse categoriesFor: #drawOn:!public! !
 !GraphicEllipse categoriesFor: #initialize!public! !
@@ -2444,13 +2402,10 @@ containsPoint: aPoint
 	^(aPoint dist: (aPoint nearestPointAlongLineFrom: self bounds origin to: self bounds corner) )<= 3!
 
 drawOn: aCanvas
-
-		graphicAttributes installOn: aCanvas.
-	^aCanvas moveTo: self bounds origin; 
-			lineTo: self bounds corner
-
-
-! !
+	graphicAttributes installOn: aCanvas.
+	^aCanvas
+		moveTo: self bounds origin;
+		lineTo: self bounds corner! !
 !GraphicLine categoriesFor: #containsPoint:!public! !
 !GraphicLine categoriesFor: #drawOn:!public! !
 
@@ -2468,12 +2423,8 @@ GraphicRectangle comment: ''!
 !GraphicRectangle methodsFor!
 
 drawOn: aCanvas
-
-
 	graphicAttributes installOn: aCanvas.
-	aCanvas rectangle: (self bounds insetBy: graphicAttributes borderWidth -1).
-
-! !
+	aCanvas rectangle: (self bounds insetBy: graphicAttributes borderWidth - 1)! !
 !GraphicRectangle categoriesFor: #drawOn:!public! !
 
 !GraphicRectangle class methodsFor!
@@ -3282,25 +3233,20 @@ self allInstances'!
 !GraphicConnection methodsFor!
 
 bounds
-
-
 	^Rectangle vertex: from center vertex: to center!
 
 containsPoint: aPoint
-
-
-
 	"(super containsPoint: aPoint )ifFalse:[^false]."
 
-	^(aPoint dist: (aPoint nearestPointAlongLineFrom: from bounds center  to: to bounds center) )<= 3!
+	^(aPoint dist: (aPoint nearestPointAlongLineFrom: from bounds center to: to bounds center)) <= 3!
 
 defaultHandlesFor: aGraphicView
-
-	|col|
+	| col |
 	col := OrderedCollection new.
-"	col addAll: (super defaultHandlesFor: aGraphicView)."
-	col add: ((GraphicConnectionHandle for: self arena: aGraphicView ) connectionEndSelector: #to:); 
-	add: (GraphicDeleteHandle for: self arena: aGraphicView ).
+	"	col addAll: (super defaultHandlesFor: aGraphicView)."
+	col
+		add: ((GraphicConnectionHandle for: self arena: aGraphicView) connectionEndSelector: #to:);
+		add: (GraphicDeleteHandle for: self arena: aGraphicView).
 	^col!
 
 drawOn: aCanvas
@@ -4317,16 +4263,13 @@ bringToFrontSelection
 	self selection do:[:aGraphic| self model bringToFront: aGraphic].!
 
 connectSelection
-
-	( self selection copyFrom: 1 to: selection size -1 )do:[:aGraphicObject| 
-			(self model add: 
-				(GraphicConnection2 
-					from: aGraphicObject 
-					to:(self selection after: aGraphicObject ))) bringToFront].
-	(self model add: 
-		(GraphicConnection2 
-			from: 	self selection last
-			to:(self selection first))) bringToFront.!
+	(self selection copyFrom: 1 to: selection size - 1) do: 
+			[:aGraphicObject |
+			(self model
+				add: (GraphicConnection2 from: aGraphicObject to: (self selection after: aGraphicObject)))
+					bringToFront].
+	(self model add: (GraphicConnection2 from: self selection last to: self selection first))
+		bringToFront!
 
 cursor
 	^self tool cursor!
@@ -4344,9 +4287,7 @@ groupSelection
 	!
 
 handleAtPoint: aPoint
-
-
-^self handles detect:[:graphObject | graphObject containsPoint: aPoint] ifNone:[nil].!
+	^self handles detect: [:graphObject | graphObject containsPoint: aPoint] ifNone: [nil]!
 
 handles
 	"Private - Answer the value of the receiver's ''handles'' instance variable."
@@ -4376,14 +4317,11 @@ isSelected: aGraphic
 	^selection includes: aGraphic!
 
 onKeyPressed: aKeyEvent
-
 	"Default handler for a mouse left button double-click event.
 	Accept the default window processing."
 
-	
 	tool onKeyPressed: aKeyEvent.
-	^super onKeyPressed: aKeyEvent.
-!
+	^super onKeyPressed: aKeyEvent!
 
 onKeyTyped: aKeyEvent
 
@@ -4412,25 +4350,25 @@ onLeftButtonDoubleClicked: aMouseEvent
 !
 
 onLeftButtonPressed: aMouseEvent
-
-	|hit hitGraph hitHandle|
-
+	| hit hitGraph hitHandle |
 	hit := aMouseEvent position.
-	
 	hitHandle := self handleAtPoint: hit.
-	hitHandle == nil  ifFalse:[ (self view dragDetect: aMouseEvent) ifTrue:[ ^hitHandle onLeftButtonDrag: aMouseEvent]
-										ifFalse:[ ^hitHandle onLeftButtonPressed: aMouseEvent] ].
-
+	hitHandle == nil
+		ifFalse: 
+			[(self view dragDetect: aMouseEvent)
+				ifTrue: [^hitHandle onLeftButtonDrag: aMouseEvent]
+				ifFalse: [^hitHandle onLeftButtonPressed: aMouseEvent]].
 	hitGraph := self model graphicObjectAt: hit.
-	hitGraph == nil  ifFalse:[^self  tool onLeftButtonPressed: aMouseEvent hit: hitGraph ].
-	tool onLeftButtonPressedBack: aMouseEvent .
-	^super  onLeftButtonPressed: aMouseEvent.!
+	hitGraph == nil ifFalse: [^self tool onLeftButtonPressed: aMouseEvent hit: hitGraph].
+	tool onLeftButtonPressedBack: aMouseEvent.
+	^super onLeftButtonPressed: aMouseEvent!
 
 removeAllHandles
-
-	handles do:[:i | self view  invalidateRect: i bounds. 
-				i setEvents: nil].
-	handles := OrderedCollection new.!
+	handles do: 
+			[:i |
+			self view invalidateRect: i bounds.
+			i setEvents: nil].
+	handles := OrderedCollection new!
 
 removeHandle: aHandle
 
@@ -4509,9 +4447,7 @@ setPathTool
 	^self tool: GraphicObjectPathCreationTool new!
 
 setRectangleTool
-
-
-	^self tool: (GraphicObjectCreationTool new newObjectPrototype: GraphicRectangle new).!
+	^self tool: (GraphicObjectCreationTool new newObjectPrototype: GraphicRectangle new)!
 
 setSelectionTool
 
@@ -4836,9 +4772,10 @@ dragDetect: aMouseEvent
 	in a drag action."
 
 	^aMouseEvent button == #left
-		ifTrue: [UserLibrary default dragDetect: self asParameter point: aMouseEvent screenPosition asParameter]
-		ifFalse: [
-			#todo "Implement right drag detection, oddly DragDetect() only works for the left button.".
+		ifTrue: 
+			[UserLibrary default dragDetect: self asParameter point: aMouseEvent screenPosition asParameter]
+		ifFalse: 
+			[#todo.	"Implement right drag detection, oddly DragDetect() only works for the left button."
 			false]!
 
 invalidateGraphicObjectRect: aGraphicObject

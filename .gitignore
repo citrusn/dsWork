@@ -4,3 +4,5 @@ sciter/SciterWraper/*
 *.idb
 *.pdb
 SciterWraper/*
+*.zip
+*.wav

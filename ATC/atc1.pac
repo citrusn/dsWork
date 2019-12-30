@@ -1,5 +1,5 @@
 | package |
-package := Package name: 'Atc Game'.
+package := Package name: 'atc1'.
 package paxVersion: 1;
 	basicComment: 'This is an example of an animated Air Traffic Simulation written in Dolphin Smaltalk. 
 
@@ -43,6 +43,7 @@ package setPrerequisites: (IdentitySet new
 	add: '..\..\Object Arts\Dolphin\MVP\Presenters\Text\Dolphin Text Presenter';
 	add: '..\..\Object Arts\Dolphin\MVP\Type Converters\Dolphin Type Converters';
 	add: '..\..\Object Arts\Dolphin\MVP\Models\Value\Dolphin Value Models';
+	add: '..\..\Contributions\Solutions Software\SSW EditableListView';
 	yourself).
 
 package!
@@ -55,7 +56,7 @@ Object subclass: #AtcCity
 	poolDictionaries: 'Win32Constants'
 	classInstanceVariableNames: ''!
 Object subclass: #AtcPlane
-	instanceVariableNames: 'flightId position velocity color departureCity destinationCity rateOfTurn'
+	instanceVariableNames: 'flightId position velocity color departureCity destinationCity rateOfTurn updateSpd updateTurn'
 	classVariableNames: ''
 	poolDictionaries: 'Win32Constants'
 	classInstanceVariableNames: ''!
@@ -70,7 +71,7 @@ Presenter subclass: #AtcPresenter
 	poolDictionaries: ''
 	classInstanceVariableNames: ''!
 Shell subclass: #AtcGameShell
-	instanceVariableNames: 'planesPresenter airspacePresenter scorePresenter statusPresenter timer random'
+	instanceVariableNames: 'planesPresenter planesPresenter2 airspacePresenter scorePresenter statusPresenter timer random controlPresenter'
 	classVariableNames: ''
 	poolDictionaries: ''
 	classInstanceVariableNames: ''!
@@ -114,7 +115,7 @@ Instance Variables:
 !AtcCity methodsFor!
 
 box
-	^Rectangle center: self location extent: self radius * 2!
+	^Rectangle center: self location extent: self radius*2!
 
 color
 	"
@@ -129,11 +130,15 @@ displayOn: aStream
 	aStream display: self name!
 
 drawOn: aCanvas 
-	" ColorDialog showModal "
-
+	"
+	ColorDialog showModal
+	"
 	| state |
 	state := aCanvas save.
-	self radius * 2 to: 500 by: 150 do: 
+"
+	self radius * 2 to: 500
+		by: 150
+		do: 
 			[:n | 
 			| ringBox |
 			ringBox := Rectangle center: self location extent: n.
@@ -142,26 +147,32 @@ drawOn: aCanvas
 			aCanvas pen: (Pen 
 						withStyle: PS_DOT
 						width: 1
-						color: (RGB red: 224 green: 224 blue: 224)). 
+						color: (RGB 
+								red: 224
+								green: 224
+								blue: 224)).
 			aCanvas ellipse: ringBox].
+"
 	aCanvas
 		brush: (Brush color: self color);
 		pen: (Pen color: self color);
 		ellipse: self box;
-		"rectangle: self box;"
 		font: (Font name: 'Arial' pixelSize: 10);
 		setTextAlign: TA_CENTER;
 		backgroundMode: TRANSPARENT;
 		text: self name at: self location - (0 @ 6).
 	aCanvas restore: state!
 
-headingFrom: anAtcCity 
+headingFrom: anAtcCity
 	| vector arcTan |
 	vector := self location - anAtcCity location.
 	vector x = 0 ifTrue: [^vector y > 0 ifTrue: [180] ifFalse: [0]].
 	arcTan := (vector y / vector x) arcTan radiansToDegrees.
 	(vector x > 0 and: [vector y < 0]) ifTrue: [^arcTan + 360 + 90].
 	vector x < 0 ifTrue: [^arcTan + 180 + 90].
+
+	" mke temp hack"
+	" ^ 180.0 "
 	^arcTan + 90!
 
 location
@@ -192,40 +203,24 @@ setName: aStringName location: aPointLocation radius: anIntegerRadius
 !AtcCity class methodsFor!
 
 athens
-	^self
-		name: 'Athens'
-		location: 480 @ 490
-		radius: 40!
+	^self name: 'Athens' location: 480 @ 490 radius: 40!
 
 frankfurt
-	^self
-		name: 'Frankfurt'
-		location: 650 @ 250
-		radius: 25!
+	^self name: 'Frankfurt' location: 650@250 radius: 25!
 
 london
-	^self
-		name: 'London'
-		location: 50 @ 50
-		radius: 50!
+	^self name: 'London' location: 250@50 radius: 50!
 
 madrid
-	^self
-		name: 'Madrid'
-		location: 50 @ 480
-		radius: 30!
+	^self name: 'Madrid' location: 50@480 radius: 30!
 
 name: aStringName location: aPointLocation radius: anIntegerRadius
-	^super new
-		setName: aStringName
-		location: aPointLocation
-		radius: anIntegerRadius!
+	^super new setName: aStringName location: aPointLocation radius: anIntegerRadius!
 
 paris
-	^self
-		name: 'Paris'
-		location: 350 @ 210
-		radius: 35! !
+	"^self name: 'Paris' location: 350@210 radius: 35"
+
+            ^self name: 'CYYZ' location: 300@400 radius: 35! !
 !AtcCity class categoriesFor: #athens!public! !
 !AtcCity class categoriesFor: #frankfurt!public! !
 !AtcCity class categoriesFor: #london!public! !
@@ -257,14 +252,19 @@ Instance Variables:
 arrivalDetectInModel: anAtcModel 
 	(self position asPoint - self destinationCity location) r < self destinationCity radius 
 		ifTrue: 
-			[anAtcModel trigger: #arrivalOf:at: with: self with: self destinationCity.
-			anAtcModel destroyPlane: self]!
+			[ anAtcModel trigger: #arrivalOf:at: with: self with: self destinationCity.
+			
+                    " Transcript show: self flightId ;show: '  ARRIVED ' ; show: self departureCity name; show: ' at ' ; show: Time new displayString. "
+
+                  "anAtcModel destroyPlane: self"
+
+                    ]!
 
 box
 	^Rectangle center: self position asPoint rounded extent: self boxExtent!
 
 boxExtent
-	^20@20!
+	^25@25!
 
 collisionColor
 	^Color red!
@@ -273,23 +273,38 @@ collisionDetectInModel: anAtcModel
 	| minDistance planesToTest closestPlane |
 	closestPlane := nil.
 	planesToTest := anAtcModel planes copyWithout: self.
+
+        "Transcript cr; cr; show:' ------   '; show: self flightId ; show:'-----------------'; cr."
+
 	minDistance := planesToTest inject: Float fmax
 				into: 
 					[:currentMin :each | 
 					| distance |
 					distance := (self position - each position) r.
+
+                                     "   Transcript cr; 
+							show: (each flightId) 
+							; show: '  currentMin:'  ; show: currentMin displayString
+                                                       ; show: '  distance:'  ; show: distance displayString.
+                                        "
 					distance < currentMin 
 						ifTrue: 
 							[closestPlane := each.
 							distance]
 						ifFalse: [currentMin]].
+
 	minDistance > self collisionWarningDistance ifTrue: [^self color: self defaultColor].
+
 	minDistance > self collisionDistance ifTrue: [^self color: self collisionColor].
+
 	anAtcModel
 		destroyPlane: self;
 		destroyPlane: closestPlane.
 	anAtcModel
-		trigger: #planesDestroyed: with: (Array with: self with: closestPlane)!
+		trigger: #planesDestroyed: with: (Array with: self with: closestPlane).
+
+       " Transcript cr; cr; show:' ===========================================';cr. "
+!
 
 collisionDistance
 	^20!
@@ -320,23 +335,52 @@ destinationCity: anAtcCity
 	destinationCity := anAtcCity!
 
 drawOn: aCanvas 
-	| flText textExtent vector velocity2D state |
+	| flText idText hdtText spdText textExtent vector velocity2D state |
+
 	state := aCanvas save.
 	aCanvas pen: Pen black.
 	velocity2D := self velocity asPoint.
+
 	velocity2D r > 0 
 		ifTrue: 
 			[vector := (velocity2D * self velocityVectorLength) rounded.
 			aCanvas moveTo: self box center.
-			aCanvas lineTo: self box center + vector].
+			aCanvas lineTo: self box center + vector.
+
+                    "Transcript show: 'vector:  ';show: vector displayString ."
+                  ].
+
+              
 	aCanvas setBkMode: TRANSPARENT.
 	aCanvas font: (Font name: 'Arial' pointSize: 8).
 	aCanvas fillRectangle: self box color: self color.
-	aCanvas text: self flightId at: self box bottomRight.
+
+	"aCanvas text: self flightId at: self box bottomRight."
+
+         " idText := 'iD', self flightId."
+        idText :=  self flightId.
+	textExtent := aCanvas textExtent:idText. 
+	aCanvas text: idText  at: self box bottomLeft -  textExtent.
+	"aCanvas text: idText  at: ((self box bottom) + 200) ."
+
+
 	flText := 'FL' , self flightLevel displayString.
 	textExtent := aCanvas textExtent: flText.
 	aCanvas text: flText at: self box topLeft - textExtent.
-	aCanvas restore: state!
+
+	hdtText  := 'h:' , self heading displayString.
+	textExtent := aCanvas textExtent: hdtText .
+	aCanvas text: hdtText  at: self box topRight. 
+
+	spdText  := 's:' , self speed displayString.
+	textExtent := aCanvas textExtent: spdText .
+	aCanvas text: spdText  at: self box bottomRight. 
+
+
+	aCanvas restore: state
+
+
+!
 
 flightId
 	"Answer the value of the receiver's 'flightId' instance variable."
@@ -357,7 +401,7 @@ heading
 	arcTan := (vector y / vector x) arcTan radiansToDegrees.
 	(vector x > 0 and: [vector y < 0]) ifTrue: [^arcTan+360 + 90].
 	(vector x < 0) ifTrue: [^arcTan+180 + 90].
-	^arcTan + 90!
+	^(arcTan + 90) asInteger!
 
 heading: headingInDegrees speed: speed 
 	|  vector |
@@ -385,15 +429,27 @@ position: anObject
 printOn: aStream 
 	super printOn: aStream.
 	aStream
-		nextPut: $(;
-		nextPutAll: self flightId;
-		nextPut: $)!
+
+	nextPut: $(;
+		nextPutAll: self flightId; nextPutAll: '  ' ;
+                nextPutAll: ' x:' ;
+                nextPutAll: (self position x asInteger ) displayString ;
+                nextPutAll: ' y:';
+                nextPutAll: (self position y asInteger ) displayString ;
+                nextPutAll: ' z:' ;
+                nextPutAll: (self position z asInteger ) displayString ;
+	
+		nextPutAll: '  spd:';nextPutAll: self speed asInteger displayString;
+                nextPutAll: ' hdg:';nextPutAll: self heading  asInteger displayString;
+                nextPutAll: ' alt:';nextPutAll: self alt asInteger displayString;
+
+	nextPut: $)!
 
 rateOfTurn
 	^rateOfTurn!
 
 speed
-	^self velocity r!
+	^self velocity r asInteger!
 
 stop
 	self velocity: Point3D zero!
@@ -408,13 +464,24 @@ turnRight
 	rateOfTurn := rateOfTurn+self turnAmount!
 
 updateForTimeInterval: timeInterval inModel: anAtcModel 
-	| newPosition newHeading |
-	newPosition := self position + (self velocity * timeInterval * 0.00003).
+	| newPosition newHeading  v ti ups pos|
+
+       pos := self position.
+       v  :=  self velocity.
+       ti  :=  timeInterval.
+       ups :=   self updateSpd.
+
+	newPosition := self position + (self velocity * timeInterval * (self updateSpd) ). 
+
+	"newPosition :=  pos + v  * ( ti  * ups)."
+
 	self position: newPosition.
-	newHeading := self heading+(self rateOfTurn * timeInterval * 0.0001).
+	newHeading := self heading+(self rateOfTurn * timeInterval * (self updateTurn) ).
 	self heading: newHeading speed: self speed.
 	self collisionDetectInModel: anAtcModel.
-	self arrivalDetectInModel: anAtcModel!
+	self arrivalDetectInModel: anAtcModel
+
+!
 
 velocity
 	"Answer the value of the receiver's 'velocity' instance variable."
@@ -427,7 +494,8 @@ velocity: anObject
 	velocity := anObject!
 
 velocityVectorLength
-	^0.075! !
+	"^0.075"
+	 ^0.900 ! !
 !AtcPlane categoriesFor: #arrivalDetectInModel:!private! !
 !AtcPlane categoriesFor: #box!public! !
 !AtcPlane categoriesFor: #boxExtent!private! !
@@ -474,9 +542,12 @@ flightId: flightId from: departureCity to: destinationCity speed: speed height: 
 				velocity: Point3D zero.
 	plane height: height.
 	plane heading: (destinationCity headingFrom: departureCity) speed: speed.
+   "mike temp hack"
+       "plane heading: 180."
 	plane
 		departureCity: departureCity;
 		destinationCity: destinationCity.
+         plane initialize.
 	^plane!
 
 flightId: aFlightIdString position: aPoint3DPosition velocity: aPoint3DVelocity 
@@ -505,7 +576,9 @@ Instance Variables:
 !AtcModel methodsFor!
 
 addPlane: anAtcPlane 
-	planes add: anAtcPlane!
+"self halt."
+	planes add: anAtcPlane.
+!
 
 cities
 	^cities!
@@ -522,7 +595,8 @@ initialize
 	super initialize.
 	planes := ListModel on: OrderedCollection new.
 	cities := ListModel on: OrderedCollection new.
-	self initializeCities!
+	self initializeCities.
+        Transcript show:'AtcModel : initialize'.!
 
 initializeCities
 	cities
@@ -530,7 +604,11 @@ initializeCities
 		add: AtcCity paris;
 		add: AtcCity frankfurt;
 		add: AtcCity madrid;
-		add: AtcCity athens!
+		add: AtcCity athens
+
+		"add: AtcCity  cnc3;
+		add: AtcCity  cyyz;
+		add: AtcCity cykf"!
 
 planes
 	^planes!
@@ -548,11 +626,11 @@ setCities: aListModel
 
 !AtcModel class methodsFor!
 
-stbConvertFrom: anSTBClassFormat
+stbConvertFrom: anSTBClassFormat 
 	"Private - Version 1 adds cities instance variable."
 
 	^
-	[:data |
+	[:data | 
 	| newInstance |
 	anSTBClassFormat version < 2
 		ifTrue: 
@@ -589,8 +667,9 @@ onViewClosed
 	super onViewClosed!
 
 onViewOpened
+        Transcript show: '(AtcPresenter) onViewOpened'.
 	super onViewOpened.
-	self startUpdateProcess.!
+	self startUpdateProcess. !
 
 startUpdateProcess
 	self stopUpdateProcess.
@@ -598,7 +677,7 @@ startUpdateProcess
 	updateProcess := [
 			[self updateGame.
 			self view repaint.
-			Processor sleep: 50] repeat]
+			Processor sleep: 50] repeat] 
 				forkAt: Processor userBackgroundPriority!
 
 stopUpdateProcess
@@ -665,11 +744,23 @@ about
 createComponents
 	"Private - Create the presenters contained by the receiver"
 
+       "planesPresenter2 := self add: ListPresenter new name: 'planes2'.    "
+
 	super createComponents.
-	planesPresenter := self add: ListPresenter new name: 'planes'.
-	airspacePresenter := self add: AtcPresenter new name: 'airspace'.
-	scorePresenter := self add: NumberPresenter new name: 'score'.
-	statusPresenter := self add: TextPresenter new name: 'status'!
+	
+      "  planesPresenter     := self add: ListPresenter new name: 'planes'. "
+
+ "mike replaced planes Listpresenter with Editable ListView"
+        controlPresenter := self add:  ListPresenter new name: 'control'.
+     
+	
+
+
+      airspacePresenter  := self add: AtcPresenter new name: 'airspace'.
+	scorePresenter       := self add: NumberPresenter new name: 'score'.
+	statusPresenter     := self add: TextPresenter new name: 'status'.
+
+    !
 
 createSchematicWiring
 	"Private - Create the event handlers observed by the receiver"
@@ -699,11 +790,22 @@ londonToMadrid
 	self newRandomFlightFrom: AtcCity london to: AtcCity madrid!
 
 londonToParis
-	self newRandomFlightFrom: AtcCity london to: AtcCity paris!
+	"self newRandomFlightFrom: AtcCity london to: AtcCity paris "
+
+" mike temp for debugging "
+" |flight |
+^ flight :=
+"
+^self newRandomFlightFrom: AtcCity london to: AtcCity paris!
 
 model: anAtcModel 
 	super model: anAtcModel.
-	planesPresenter model: anAtcModel planes.
+	"planesPresenter model: anAtcModel planes."
+
+       " planesPresenter2 model: anAtcModel planes."
+"mke  - for issuing commands "
+        controlPresenter model: anAtcModel planes.
+
 	airspacePresenter model: anAtcModel.
 	anAtcModel
 		when: #arrivalOf:at:
@@ -727,14 +829,25 @@ newRandomFlightFrom: departure to: destination
 	airlinePrefix := airlineCodes at: (self random next * airlineCodes size) ceiling.
 	flightNo := (self random next * 800) ceiling + 100.
 	flightId := airlinePrefix asString , flightNo displayString.
-	speed := (self random next  * 300) ceiling + 300.
+
+"self halt."
+ 
+	speed := (self random next  * 30) ceiling + 30.
 	plane := AtcPlane 
 				flightId: flightId
 				from: departure
 				to: destination
-				speed: speed
-				height: 15000.
-	self model addPlane: plane!
+				speed: speed 
+			        "alt: 9000."
+  	                       height: 9000.
+" mike hacK"
+      " plane heading: 180.0. "
+
+"self halt."
+
+self model addPlane: plane.
+" mike added  for debugging"
+^plane.!
 
 onGameUpdated
 	| nearMisses |
@@ -745,10 +858,22 @@ onGameUpdated
 		ifFalse: [self status: '' color: Color darkGreen]!
 
 onPlaneArrived
-	[self score: self score+self planeArrivedScore] postToInputQueue!
+	[self score: self score+self planeArrivedScore] postToInputQueue.
+        self status: 'ARRIVAL' , 'abc' color: Color red.!
 
-onPlaneClicked: aPlaneOrNil 
-	planesPresenter selectionOrNil: aPlaneOrNil!
+onPlaneClicked: aPlaneOrNil
+
+" ifTrue:"
+     "   aPlaneOrNil  ifNotNil:  [
+         Transcript show: '(AtcGameShell) >>onPlaneClicked';show:aPlaneOrNil  flightId .
+        }.
+"
+
+    " mike - this selects  the  planes entry in the planes list when a plane is clicked in the AtcView (graphics view)  "
+
+        controlPresenter selectionOrNil: aPlaneOrNil
+
+"	planesPresenter selectionOrNil: aPlaneOrNil "!
 
 onPlanesDestroyed
 	[self score: self score - self planeDestroyedScore] postToInputQueue!
@@ -775,6 +900,7 @@ queryCommand: aCommandQuery
 
 	| selector |
 	selector := aCommandQuery commandSymbol.
+
 	(#(#turnLeft #turnRight) identityIncludes: selector) 
 		ifTrue: 
 			[aCommandQuery isEnabled: self selectionOrNil notNil.
@@ -802,7 +928,11 @@ score: newScore
 	newScore >= self winningScore ifTrue: [^self youWin]!
 
 selectionOrNil
-	^planesPresenter selectionOrNil!
+	"^planesPresenter selectionOrNil"
+
+          ^controlPresenter selectionOrNil
+
+!
 
 startGame
 	self resetGame.
@@ -923,7 +1053,7 @@ resource_Default_view
 	ViewComposer openOn: (ResourceIdentifier class: self selector: #resource_Default_view)
 	"
 
-	^#(#'!!STL' 3 788558 10 ##(Smalltalk.STBViewProxy)  8 ##(Smalltalk.ShellView)  98 27 0 0 98 2 27131905 131073 416 0 524550 ##(Smalltalk.ColorRef)  8 4278190080 328198 ##(Smalltalk.Point)  1801 1401 551 0 0 0 416 788230 ##(Smalltalk.BorderLayout)  1 1 410 8 ##(Smalltalk.ContainerView)  98 15 0 416 98 2 8 1140850688 131073 592 0 196934 1 ##(Smalltalk.RGB)  30780331 0 7 0 0 0 592 562 1 1 0 0 410 8 ##(Smalltalk.StaticText)  98 16 0 592 98 2 8 1140850944 1 720 721990 2 ##(Smalltalk.ValueHolder)  0 32 1114638 ##(Smalltalk.STBSingletonProxy)  8 ##(Smalltalk.SearchPolicy)  8 #equality 0 674 30780331 0 7 265030 4 ##(Smalltalk.Menu)  0 16 98 10 984134 2 ##(Smalltalk.CommandMenuItem)  1 1180998 4 ##(Smalltalk.CommandDescription)  8 #chooseSelectionFont 8 '&Font...' 1 1 0 0 0 983366 1 ##(Smalltalk.DividerMenuItem)  4097 962 1 994 8 #bePlain 8 '&Plain' 1 1 0 0 0 962 1 994 8 #toggleBold 8 '&Bold' 1 1 0 0 0 962 1 994 8 #toggleItalic 8 '&Italic' 1 1 0 0 0 962 1 994 8 #toggleUnderlined 8 '&Underlined' 1 1 0 0 0 1058 4097 914 0 16 98 3 962 1025 994 8 #alignParagraphLeft 8 '&Left' 1 1 0 0 0 962 1025 994 8 #alignParagraphCenter 8 '&Centre' 1 1 0 0 0 962 1025 994 8 #alignParagraphRight 8 '&Right' 1 1 0 0 0 8 '&Align' 0 1 0 0 0 0 0 1058 4097 962 1 994 8 #chooseSelectionColor 8 '&Colour...' 1 1 0 0 0 8 '' 0 1 0 0 0 0 0 263174 ##(Smalltalk.Font)  0 16 459014 ##(Smalltalk.LOGFONT)  8 #[245 255 255 255 0 0 0 0 0 0 0 0 0 0 0 0 144 1 0 0 0 0 0 0 3 2 1 34 65 114 105 97 108 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0] 530 193 193 0 720 786694 ##(Smalltalk.IndexedColor)  33554437 8 4294902439 852486 ##(Smalltalk.NullConverter)  0 0 0 983302 ##(Smalltalk.MessageSequence)  202 208 98 3 721670 ##(Smalltalk.MessageSend)  8 #createAt:extent: 98 2 530 1159 11 530 601 91 720 1938 8 #contextMenu: 98 1 928 720 1938 8 #text: 98 1 8 'Steer the planes to avoid collisions. Select a plane in danger and type Ctrl+L or Ctrl+R to initiate turns left or right. Reach 2000pts to win or below zero to lose.' 720 983302 ##(Smalltalk.WINDOWPLACEMENT)  8 #[44 0 0 0 0 0 0 0 1 0 0 0 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 67 2 0 0 5 0 0 0 111 3 0 0 50 0 0 0] 98 0 530 193 193 0 27 410 736 98 16 0 592 98 2 8 1140850945 1 2224 0 0 0 7 0 1698 0 16 1730 8 #[219 255 255 255 0 0 0 0 0 0 0 0 0 0 0 0 188 2 0 0 0 0 0 0 3 2 1 34 65 114 105 97 108 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0] 530 193 193 0 2224 674 303 8 4294902439 1842 0 0 0 1874 202 208 98 2 1938 1968 98 2 530 11 11 530 601 91 2224 1938 2096 98 1 8 'WARNING' 2224 2146 8 #[44 0 0 0 0 0 0 0 1 0 0 0 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 5 0 0 0 5 0 0 0 49 1 0 0 50 0 0 0] 98 0 2208 0 27 410 736 98 16 0 592 98 2 8 1140850945 1 2608 0 0 0 7 0 1698 0 16 1730 8 #[221 255 255 255 0 0 0 0 0 0 0 0 0 0 0 0 188 2 0 0 0 0 0 0 3 2 1 49 67 111 117 114 105 101 114 32 78 101 119 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0] 530 193 193 0 2608 674 7927807 8 4294902439 852742 ##(Smalltalk.IntegerToText)  0 8 '' 0 0 1874 202 208 98 1 1938 1968 98 2 530 611 11 530 549 91 2608 2146 8 #[44 0 0 0 0 0 0 0 1 0 0 0 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 49 1 0 0 5 0 0 0 67 2 0 0 50 0 0 0] 98 0 2208 0 27 234 256 98 4 2224 8 'status' 2608 8 'score' 590342 ##(Smalltalk.Rectangle)  530 11 11 530 11 11 1874 202 208 98 2 1938 1968 98 2 530 1 1 530 1769 111 592 1938 2096 98 1 8 'Info and Score' 592 2146 8 #[44 0 0 0 0 0 0 0 1 0 0 0 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 0 0 0 0 0 0 0 0 116 3 0 0 55 0 0 0] 98 3 2224 720 2608 2208 0 27 0 0 0 410 608 98 15 0 416 98 2 8 1140850688 131073 3312 0 0 0 7 0 0 0 3312 1180166 ##(Smalltalk.ProportionalLayout)  234 240 98 2 410 8 ##(Smalltalk.ListView)  98 30 0 3312 98 2 8 1140920397 1025 3440 590662 2 ##(Smalltalk.ListModel)  202 208 98 0 0 842 864 8 #identity 1794 33554433 0 7 0 0 0 3440 1794 33554471 8 4294903271 459270 ##(Smalltalk.Message)  8 #displayString 98 0 0 842 8 ##(Smalltalk.IconImageManager)  8 #current 0 0 0 0 0 0 202 208 98 3 920646 5 ##(Smalltalk.ListViewColumn)  8 'Flight Id' 131 8 #left 3666 3696 3568 3666 8 #<= 3568 787814 3 ##(Smalltalk.BlockClosure)  0 0 1180966 ##(Smalltalk.CompiledExpression)  2 1 8 ##(Smalltalk.UndefinedObject)  8 'doIt' 8 '[:plane | plane flightId]' 8 #[30 105 226 0 106] 8 #flightId 3936 7 257 0 0 3440 0 1 0 0 3810 8 'Departure' 161 3856 3666 3696 3568 3666 3904 3568 3922 0 0 3954 2 1 3984 8 'doIt' 8 '[:plane | plane departureCity]' 8 #[30 105 226 0 106] 8 #departureCity 4128 7 257 0 0 3440 0 1 0 0 3810 8 'Destination' 157 3856 3666 3696 3568 3666 3904 3568 3922 0 0 3954 2 1 3984 8 'doIt' 8 '[:plane | plane destinationCity]' 8 #[30 105 226 0 106] 8 #destinationCity 4288 7 257 0 0 3440 0 3 0 0 8 #report 3568 0 2145 0 0 1874 202 208 98 2 1938 1968 98 2 530 1 1 530 455 1175 3440 1938 2096 98 1 8 'Flight Id' 3440 2146 8 #[44 0 0 0 0 0 0 0 1 0 0 0 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 0 0 0 0 0 0 0 0 227 0 0 0 75 2 0 0] 98 0 2208 0 27 327734 ##(Smalltalk.Float)  8 102 102 102 102 102 102 214 63 32 234 256 98 4 410 8 ##(Smalltalk.AtcView)  98 14 0 3312 98 2 8 1149239296 1 4672 525126 2 ##(Smalltalk.AtcModel)  0 3522 202 208 3568 0 842 864 3600 3522 202 208 3568 0 4816 674 14236159 0 7 0 0 0 4672 395334 3 ##(Smalltalk.Bitmap)  0 16 0 0 0 0 1 530 1303 1175 32 1874 202 208 98 1 1938 1968 98 2 530 467 1 530 1303 1175 4672 2146 8 #[44 0 0 0 0 0 0 0 1 0 0 0 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 233 0 0 0 0 0 0 0 116 3 0 0 75 2 0 0] 98 0 2208 0 27 8 'airspace' 3440 8 'planes' 0 1874 202 208 98 2 1938 1968 98 2 530 1 111 530 1769 1175 3312 1938 2096 98 1 8 'Main Game Area' 3312 2146 8 #[44 0 0 0 0 0 0 0 1 0 0 0 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 0 0 0 0 55 0 0 0 116 3 0 0 130 2 0 0] 98 3 3440 410 8 ##(Smalltalk.Splitter)  98 12 0 3312 98 2 8 1140850688 1 5328 0 482 8 4278190080 0 7 0 0 0 5328 1874 202 208 98 1 1938 1968 98 2 530 455 1 530 13 1175 5328 2146 8 #[44 0 0 0 0 0 0 0 1 0 0 0 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 227 0 0 0 0 0 0 0 233 0 0 0 75 2 0 0] 98 0 2208 0 27 4672 2208 0 27 234 256 3568 0 461638 4 ##(Smalltalk.MenuBar)  0 16 98 4 914 0 16 98 5 962 1 994 8 #startGame 8 '&Start Game' 1 1 0 0 0 1058 4097 962 1 994 8 #resetGame 8 '&Reset Game' 1 1 0 0 0 1058 4097 962 1 994 8 #exit 8 '&Quit' 17639 1 0 0 0 8 '&Game' 0 134217729 0 0 28727 0 0 914 0 16 98 6 962 1 994 8 #newRandomFlight 8 '&New Random Flight' 9373 1 0 0 0 1058 4097 962 1 994 8 #londonToParis 8 'London->&Paris' 1 1 0 0 0 962 1 994 8 #londonToFrankfurt 8 'London->&Frankfurt' 1 1 0 0 0 962 1 994 8 #londonToAthens 8 'London->&Athens' 1 1 0 0 0 962 1 994 8 #londonToMadrid 8 'London->&Madrid' 1 1 0 0 0 8 '&Flight' 0 134217729 0 0 28739 0 0 914 0 16 98 2 962 1 994 8 #turnLeft 8 'Turn Left' 9369 1 0 0 0 962 1 994 8 #turnRight 8 'Turn Right' 9381 1 0 0 0 8 '&Course' 0 134217729 0 0 28745 0 0 962 1 994 8 #about 8 '&About' 1 1 0 0 0 8 '' 0 134217729 0 0 0 0 0 0 0 0 1 0 0 0 0 1 0 0 1874 202 208 98 3 1938 1968 98 2 530 2923 21 530 1801 1401 416 1938 2096 98 1 8 'Don''t Panic!! - An Air Traffic Simulation for Dolphin Smalltalk' 416 1938 8 #updateMenuBar 3568 416 2146 8 #[44 0 0 0 0 0 0 0 0 0 0 0 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 181 5 0 0 10 0 0 0 57 9 0 0 198 2 0 0] 98 2 592 3312 2208 0 27 )!
+	^#(#'!!STL' 3 788558 10 ##(Smalltalk.STBViewProxy) 8 ##(Smalltalk.ShellView) 98 27 0 0 98 2 27131905 131073 416 0 524550 ##(Smalltalk.ColorRef) 8 4278190080 328198 ##(Smalltalk.Point) 2701 1501 551 0 0 0 416 0 234 256 98 0 0 461638 4 ##(Smalltalk.MenuBar) 0 16 98 4 265030 4 ##(Smalltalk.Menu) 0 16 98 5 984134 2 ##(Smalltalk.CommandMenuItem) 1 1180998 4 ##(Smalltalk.CommandDescription) 8 #startGame 8 '&Start Game' 1 1 0 0 0 983366 1 ##(Smalltalk.DividerMenuItem) 4097 690 1 722 8 #resetGame 8 '&Reset Game' 1 1 0 0 0 786 4097 690 1 722 8 #exit 8 '&Quit' 17639 1 0 0 0 8 '&Game' 0 134217729 0 0 20527 0 0 642 0 16 98 6 690 1 722 8 #newRandomFlight 8 '&New Random Flight' 9373 1 0 0 0 786 4097 690 1 722 8 #londonToParis 8 'London->&Paris' 1 1 0 0 0 690 1 722 8 #londonToFrankfurt 8 'London->&Frankfurt' 1 1 0 0 0 690 1 722 8 #londonToAthens 8 'London->&Athens' 1 1 0 0 0 690 1 722 8 #londonToMadrid 8 'London->&Madrid' 1 1 0 0 0 8 '&Flight' 0 134217729 0 0 20539 0 0 642 0 16 98 2 690 1 722 8 #turnLeft 8 'Turn Left' 9369 1 0 0 0 690 1 722 8 #turnRight 8 'Turn Right' 9381 1 0 0 0 8 '&Course' 0 134217729 0 0 20545 0 0 690 1 722 8 #about 8 '&About' 1 1 0 0 0 8 '' 0 134217729 0 0 0 0 0 0 0 0 1 0 0 0 0 1 0 0 983302 ##(Smalltalk.MessageSequence) 202 208 98 3 721670 ##(Smalltalk.MessageSend) 8 #createAt:extent: 98 2 530 2731 21 530 2701 1501 416 1682 8 #text: 98 1 8 'An Air Traffic Simulation for Dolphin Smalltalk' 416 1682 8 #updateMenuBar 576 416 983302 ##(Smalltalk.WINDOWPLACEMENT) 8 #[44 0 0 0 0 0 0 0 0 0 0 0 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 85 5 0 0 10 0 0 0 155 10 0 0 248 2 0 0] 98 2 410 8 ##(Smalltalk.ContainerView) 98 15 0 416 98 2 8 1140850688 131073 1936 0 196934 1 ##(Smalltalk.RGB) 30780331 0 7 0 0 0 1936 788230 ##(Smalltalk.BorderLayout) 1 1 0 0 410 8 ##(Smalltalk.StaticText) 98 16 0 1936 98 2 8 1140850944 1 2080 721990 2 ##(Smalltalk.ValueHolder) 0 32 1310726 ##(Smalltalk.EqualitySearchPolicy) 0 2018 30780331 0 7 642 0 16 98 10 690 1 722 8 #chooseSelectionFont 8 '&Font...' 1 1 0 0 0 786 4097 690 1 722 8 #bePlain 8 '&Plain' 1 1 0 0 0 690 1 722 8 #toggleBold 8 '&Bold' 1 1 0 0 0 690 1 722 8 #toggleItalic 8 '&Italic' 1 1 0 0 0 690 1 722 8 #toggleUnderlined 8 '&Underlined' 1 1 0 0 0 786 4097 642 0 16 98 3 690 1025 722 8 #alignParagraphLeft 8 '&Left' 1 1 0 0 0 690 1025 722 8 #alignParagraphCenter 8 '&Centre' 1 1 0 0 0 690 1025 722 8 #alignParagraphRight 8 '&Right' 1 1 0 0 0 8 '&Align' 0 1 0 0 0 0 0 786 4097 690 1 722 8 #chooseSelectionColor 8 '&Colour...' 1 1 0 0 0 8 '' 0 1 0 0 0 0 0 263174 ##(Smalltalk.Font) 0 16 459014 ##(Smalltalk.LOGFONT) 8 #[245 255 255 255 0 0 0 0 0 0 0 0 0 0 0 0 144 1 0 0 0 0 0 0 3 2 1 34 65 114 105 97 108 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0] 530 193 193 0 2080 786694 ##(Smalltalk.IndexedColor) 33554437 8 4294902612 852486 ##(Smalltalk.NullConverter) 0 0 0 1618 202 208 98 3 1682 1712 98 2 530 1701 11 530 601 91 2080 1682 8 #contextMenu: 98 1 2240 2080 1682 1792 98 1 8 'Steer the planes to avoid collisions. Select a plane in danger and type Ctrl+L or Ctrl+R to initiate turns left or right. Reach 2000pts to win or below zero to lose.' 2080 1874 8 #[44 0 0 0 0 0 0 0 1 0 0 0 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 82 3 0 0 5 0 0 0 126 4 0 0 50 0 0 0] 98 0 530 193 193 0 27 410 2096 98 16 0 1936 98 2 8 1140850945 1 3408 0 0 0 7 0 2962 0 16 2994 8 #[219 255 255 255 0 0 0 0 0 0 0 0 0 0 0 0 188 2 0 0 0 0 0 0 3 2 1 34 65 114 105 97 108 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0] 530 193 193 0 3408 2018 303 8 4294902612 3106 0 0 0 1618 202 208 98 2 1682 1712 98 2 530 11 11 530 601 91 3408 1682 1792 98 1 8 'WARNING' 3408 1874 8 #[44 0 0 0 0 0 0 0 1 0 0 0 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 5 0 0 0 5 0 0 0 49 1 0 0 50 0 0 0] 98 0 3392 0 27 410 2096 98 16 0 1936 98 2 8 1140850945 1 3792 0 0 0 7 0 2962 0 16 2994 8 #[221 255 255 255 0 0 0 0 0 0 0 0 0 0 0 0 188 2 0 0 0 0 0 0 3 2 1 49 67 111 117 114 105 101 114 32 78 101 119 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0] 530 193 193 0 3792 2018 7927807 8 4294902612 852742 ##(Smalltalk.IntegerToText) 0 8 '' 0 0 1618 202 208 98 1 1682 1712 98 2 530 611 11 530 1091 91 3792 1874 8 #[44 0 0 0 0 0 0 0 1 0 0 0 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 49 1 0 0 5 0 0 0 82 3 0 0 50 0 0 0] 98 0 3392 0 27 234 256 98 4 3792 8 'score' 3408 8 'status' 590342 ##(Smalltalk.Rectangle) 530 11 11 530 11 11 1618 202 208 98 2 1682 1712 98 2 530 5 1 530 2311 111 1936 1682 1792 98 1 8 'Info and Score' 1936 1874 8 #[44 0 0 0 0 0 0 0 1 0 0 0 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 2 0 0 0 0 0 0 0 133 4 0 0 55 0 0 0] 98 3 3408 2080 3792 3392 0 27 410 1952 98 15 0 416 98 2 8 1140850688 131073 4496 0 0 0 7 0 0 0 4496 0 234 256 98 4 410 8 ##(Smalltalk.AtcView) 98 14 0 4496 98 2 8 1149239296 1 4592 525126 2 ##(Smalltalk.AtcModel) 0 590662 2 ##(Smalltalk.ListModel) 202 208 576 0 1310726 ##(Smalltalk.IdentitySearchPolicy) 4706 202 208 576 0 4768 2018 14236159 0 23 0 0 0 4592 395334 3 ##(Smalltalk.Bitmap) 0 16 0 0 0 0 1 530 1871 1111 32 1618 202 208 98 1 1682 1712 98 2 530 751 11 530 1871 1111 4592 1874 8 #[44 0 0 0 0 0 0 0 1 0 0 0 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 119 1 0 0 5 0 0 0 30 5 0 0 48 2 0 0] 98 0 3392 0 27 8 'airspace' 410 8 ##(Smalltalk.EditableListView) 98 40 0 4496 98 2 8 1140920397 1025 5056 4706 202 208 576 0 4768 482 8 4278190080 0 7 0 0 0 5056 0 8 4294902481 8 ##(Smalltalk.BasicListAbstract) 8 ##(Smalltalk.IconicListAbstract) 1049926 1 ##(Smalltalk.IconImageManager) 0 0 0 530 65 65 0 0 202 208 98 7 1447494 14 ##(Smalltalk.EditableListViewColumn) 8 'FlightId' 181 8 #left 5216 8 ##(Smalltalk.SortedCollection) 787814 3 ##(Smalltalk.BlockClosure) 0 0 1180966 ##(Smalltalk.CompiledExpression) 2 1 8 ##(Smalltalk.UndefinedObject) 8 'doIt' 8 '[:plane | plane flightId]' 8 #[30 105 226 0 106] 8 #flightId 5424 7 257 0 0 5056 0 1 0 0 32 0 1052998 13 ##(Smalltalk.EmbeddedTextEdit) 0 0 98 2 134349057 1 5568 2162 0 32 2208 0 0 0 5 0 0 0 5568 0 0 3106 0 8 '' 1 0 0 0 0 0 0 0 0 5330 8 'Hdg' 81 5376 459270 ##(Smalltalk.Message) 8 #displayString 98 0 5682 8 #<= 5728 5410 0 0 5442 2 1 5472 8 'doIt' 8 '[:plane | plane heading]' 8 #[30 105 226 0 106] 8 #heading 5776 7 257 0 0 5056 0 1 0 0 16 5682 8 #controlHdg: 98 1 0 5554 0 0 98 2 134349057 1 5920 2162 0 32 2208 0 482 8 4278190080 0 5 0 0 0 5920 0 0 0 1 0 0 0 0 0 0 0 0 5330 8 'Spd' 81 5376 5682 5712 5728 5682 5760 5728 5410 0 0 5442 2 1 5472 8 'doIt' 8 '[:plane | plane speed]' 8 #[30 105 226 0 106] 8 #speed 6064 7 257 0 0 5056 0 1 0 0 16 5682 8 #controlSpd: 98 1 0 5554 0 0 98 2 134349057 1 6208 2162 0 32 2208 0 482 5984 0 5 0 0 0 6208 0 0 0 1 0 0 0 0 0 0 0 0 5330 8 'Alt' 121 5376 5682 5712 5728 5682 5760 5728 5410 0 0 5442 2 1 5472 8 'doIt' 8 '[:plane | plane alt]' 8 #[30 105 226 0 106] 8 #alt 6336 7 257 0 0 5056 0 1 0 0 16 5682 8 #controlAlt: 98 1 0 5554 0 0 98 2 134349057 1 6480 2162 0 32 2208 0 482 5984 0 5 0 0 0 6480 0 0 0 1 0 0 0 0 0 0 0 0 5330 8 'Dep' 101 5376 5682 5712 98 0 5682 5760 6592 5410 0 0 5442 3 1 5408 8 'doIt' 8 '[:plane | plane dep name ]' 8 #[31 105 226 0 159 106] 8 #dep 8 #name 6624 7 257 0 0 5056 0 1 0 0 16 0 5554 0 0 98 2 134349057 1 6736 2162 0 32 2208 0 482 8 4278190080 0 5 0 0 0 6736 0 0 0 1 0 0 0 0 0 0 0 0 5330 8 'Dest' 101 5376 5682 5712 6592 5682 5760 6592 5410 0 0 5442 3 1 5408 8 'doIt' 8 '[:plane | plane dest name ]' 8 #[31 105 226 0 159 106] 8 #dest 6720 6880 7 257 0 0 5056 0 1 0 0 16 0 5554 0 0 98 2 134349057 1 6976 2162 0 32 2208 0 482 6800 0 5 0 0 0 6976 0 0 0 1 0 0 0 0 0 0 0 0 5330 8 'Info' 201 5376 5682 5712 98 0 5682 5760 7088 0 0 5056 0 1 0 0 32 0 5554 0 0 98 2 134349057 1 7120 2162 0 32 2208 0 482 8 4278190080 0 5 0 0 0 7120 0 0 0 1 0 0 0 0 0 0 0 0 8 #report 576 0 131171 0 98 4 0 0 530 1 1 0 0 202 208 576 0 0 0 3 0 0 0 0 1618 202 208 98 2 1682 1712 98 2 530 1 11 530 731 1011 5056 1682 1792 98 1 8 'FlightId' 5056 1874 8 #[44 0 0 0 0 0 0 0 1 0 0 0 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 0 0 0 0 5 0 0 0 109 1 0 0 254 1 0 0] 98 0 3392 0 31 8 'control' 0 1618 202 208 98 2 1682 1712 98 2 530 15 131 530 2631 1151 4496 1682 1792 98 1 8 'Main Game Area' 4496 1874 8 #[44 0 0 0 0 0 0 0 1 0 0 0 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 255 7 0 0 0 65 0 0 0 42 5 0 0 128 2 0 0] 98 2 4592 5056 3392 0 27 3392 0 27 )!
 
 uninitialize
 	"Private - Uninitialize the receiver as it is about to be removed from the system.
@@ -978,7 +1108,7 @@ AtcView is a view that displays the contents of the animated airspace held in an
 !AtcView categoriesForClass!Unclassified! !
 !AtcView methodsFor!
 
-onLeftButtonPressed: aMouseEvent
+onLeftButtonPressed: aMouseEvent 
 	| selection |
 	selection := self model planes detect: [:each | each box containsPoint: aMouseEvent position]
 				ifNone: [].
@@ -993,7 +1123,7 @@ render
 	self model drawOn: canvas.
 	super render!
 
-visualObjectAtPoint: aPoint
+visualObjectAtPoint: aPoint 
 	^self model planes , self model cities detect: [:each | each box containsPoint: aPoint]
 		ifNone: [super visualObjectAtPoint: aPoint]! !
 !AtcView categoriesFor: #onLeftButtonPressed:!private! !
