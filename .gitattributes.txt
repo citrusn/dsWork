@@ -1,0 +1,14 @@
+* text=auto  
+include/* linguist-vendored=true 
+*.nim linguist-language=Nim 
+*.nim text diff=Nim 
+*.st linguist-language=Smalltalk
+*.pac linguist-language=Smalltalk
+*.cls linguist-language=Smalltalk
+*.st text diff=Smalltalk
+*.pac text diff=Smalltalk
+*.cls text diff=Smalltalk
+
+*.gitattributes text  
+.gitignore text  
+*.md text  
