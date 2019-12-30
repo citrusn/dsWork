@@ -1,5 +1,5 @@
 dOPCDAClient.exe
-*.dll*
+*.dll_*
 sciter/SciterWraper/*
 *.idb
 *.pdb
@@ -8,3 +8,4 @@ SciterWraper/*
 *.wav
 WinConsoleTlb/*
 WinConsoleTlb
+sciter/SciterWraper.dll
