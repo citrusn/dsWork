@@ -82,44 +82,44 @@
             } 
 
             // Core 
-            SetCoreWord("nop", Nop); 
-            SetCoreWord("next", Next); 
-            SetCoreWord("doList", DoList); 
-            SetCoreWord("exit", Exit); 
-            SetCoreWord("execute", Execute); 
-            SetCoreWord("doLit", DoLit); 
-            SetCoreWord(":", BeginDefWord); 
-            SetCoreWord(";", EndDefWord, true); 
-            SetCoreWord("branch", Branch); 
-            SetCoreWord("0branch", ZBranch); 
-            SetCoreWord("here", GetHereAddr); 
-            SetCoreWord("quit", Quit); 
-            SetCoreWord("dump", Dump); 
-            SetCoreWord("words", Words); 
-            SetCoreWord("'", Tick); 
-            SetCoreWord(",", Comma); 
-            SetCoreWord("[", Lbrac, true); 
-            SetCoreWord("]", Rbrac); 
+            SetCoreWord("nop", Nop);        1
+            SetCoreWord("next", Next);      2
+            SetCoreWord("doList", DoList);  3
+            SetCoreWord("exit", Exit);      4
+            SetCoreWord("execute", Execute); 5
+            SetCoreWord("doLit", DoLit);    6
+            SetCoreWord(":", BeginDefWord); 7
+            SetCoreWord(";", EndDefWord, true); 8
+            SetCoreWord("branch", Branch);      9
+            SetCoreWord("0branch", ZBranch);    10 
+            SetCoreWord("here", GetHereAddr);   11
+            SetCoreWord("quit", Quit);          12
+            SetCoreWord("dump", Dump);          13
+            SetCoreWord("words", Words);        14
+            SetCoreWord("'", Tick);             15
+            SetCoreWord(",", Comma);            16
+            SetCoreWord("[", Lbrac, true);      17
+            SetCoreWord("]", Rbrac);            18
             SetCoreWord("immediate", Immediate, true); 
             // Mem 
-            SetCoreWord("!", WriteMem); 
-            SetCoreWord("@", ReadMem); 
-            SetCoreWord("variable", Variable); 
-            SetCoreWord("constant", Constant); 
+            SetCoreWord("!", WriteMem);  20
+            SetCoreWord("@", ReadMem);  21
+            SetCoreWord("variable", Variable);  22
+            SetCoreWord("constant", Constant); 23
             // RW 
-            SetCoreWord(".", Dot); 
+            SetCoreWord(".", Dot); 24
             SetCoreWord(".s", DotS); 
             SetCoreWord("cr", Cr); 
             SetCoreWord("bl", Bl); 
-            SetCoreWord("word", ReadWord, true); 
-            SetCoreWord("s\"", ReadString, true); 
-            SetCoreWord("key", Key); 
+            SetCoreWord("word", ReadWord, true);  28
+            SetCoreWord("s\"", ReadString, true);  29
+            SetCoreWord("key", Key);  30
             // Comment 
-            SetCoreWord("(", Comment, true); 
-            SetCoreWord("\\", CommentLine, true); 
+            SetCoreWord("(", Comment, true);  31
+            SetCoreWord("\\", CommentLine, true);  32
             // .net mem 
-            SetCoreWord("null", Null); 
-            SetCoreWord("new", New); 
+            SetCoreWord("null", Null);  33
+            SetCoreWord("new", New);  
             SetCoreWord("type", GetType); 
             SetCoreWord("m!", SetMember); 
             SetCoreWord("m@", GetMember); 
@@ -128,31 +128,31 @@
             SetCoreWord("load-assembly", LoadAssembly); 
             SetCoreWord("invk", invk); 
             // Boolean 
-            SetCoreWord("true", True); 
-            SetCoreWord("false", False); 
+            SetCoreWord("true", True); 34
+            SetCoreWord("false", False); 35
             SetCoreWord("and", And); 
             SetCoreWord("or", Or); 
             SetCoreWord("xor", Xor); 
             SetCoreWord("not", Not); 
-            SetCoreWord("invert", Invert); 
+            SetCoreWord("invert", Invert); 40
             SetCoreWord("=", Eql); 
             SetCoreWord("<>", NotEql); 
             SetCoreWord("<", Less); 
             SetCoreWord(">", Greater); 
-            SetCoreWord("<=", LessEql); 
+            SetCoreWord("<=", LessEql); 45
             SetCoreWord(">=", GreaterEql); 
             // Math 
-            SetCoreWord("-", Minus); 
+            SetCoreWord("-", Minus); 47
             SetCoreWord("+", Plus); 
             SetCoreWord("*", Multiply); 
-            SetCoreWord("/", Devide); 
+            SetCoreWord("/", Devide); 50
             SetCoreWord("mod", Mod); 
             SetCoreWord("1+", Inc); 
             SetCoreWord("1-", Dec); 
             // Stack 
-            SetCoreWord("drop", Drop); 
-            SetCoreWord("swap", Swap); 
-            SetCoreWord("dup", Dup); 
+            SetCoreWord("drop", Drop); 54 
+            SetCoreWord("swap", Swap); 55
+            SetCoreWord("dup", Dup);  56
             SetCoreWord("over", Over); 
             SetCoreWord("rot", Rot); 
             SetCoreWord("nrot", Nrot); 
@@ -171,7 +171,7 @@
             // control flow 
             Eval(": if immediate doLit [ ' 0branch , ] , here @ 0 , ;"); 
             Eval(": then immediate dup here @ swap - swap ! ;"); 
-            Eval(": else immediate [ ' branch , ] , here @ 0 , swap dup here @ swap - swap ! ;"); 
+            Eval(": else immediate doLit [ ' branch , ] , here @ 0 , swap dup here @ swap - swap ! ;"); 
 
             // loops 
             Eval(": begin immediate here @ ;"); 

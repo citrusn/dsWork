@@ -99,7 +99,7 @@ comment
             self skipComment: input params: ')'!
 
 commentLine
-            self skipComment: input params: '\n\r'!
+            self skipComment: input params: String lineDelimiter!
 
 constant	
 	self addHeader: (self readWord: input).
@@ -167,7 +167,8 @@ dot
             self write: (ds pop) displayString!
 
 dots
-	ds do: [:each | each ifNotNil: [:value | self writeLine: value] ifNil: [self writeLine: 'null']]!
+	1 to: ds size
+		do: [:i | (ds at: i) ifNotNil: [:value | self writeLine: value displayString ] ifNil: [self writeLine: 'null']]!
 
 drop
 	ds pop!
@@ -206,6 +207,12 @@ endDefWord
 	isEvalMode := true.
 	lastWordHeader isEnable: true!
 
+entries
+	^entries!
+
+entries: anObject
+	entries := anObject!
+
 eql
 	| a b |
 	a := ds pop.
@@ -232,7 +239,7 @@ execute
 			self next	" run evaluator"]!
 
 execute: anAddress
-	[anAddress < core size
+	[anAddress <= core size
 		ifTrue: [" eval core "
 			(core at: anAddress) value	" invoke core function "]
 		ifFalse: [" eval word "
@@ -252,6 +259,18 @@ false
 getHereAddr
             ds push: hereP
         !
+
+getMember
+	^Error notYetImplemented!
+
+getStaticMember
+	^Error notYetImplemented!
+
+getType
+	| obj class|
+	obj := ds pop.
+	class := Smalltalk at: obj asSymbol.
+	ds push:  class!
 
 greater
 	| a b |
@@ -317,27 +336,33 @@ initCore
 	self setCoreWord: 'cr' handler: [self cr ] immediate: false.            
 	self setCoreWord: 'bl' handler: [self  bl] immediate: false.            
 	self setCoreWord: 'word' handler: [self readWord ] immediate: true.
-	self setCoreWord: 's\"' handler: [self readString ] immediate: true. 
+	self setCoreWord: 's"' handler: [self readString ] immediate: true. 
 	self setCoreWord: 'key' handler: [self key ] immediate: false.                        
         " Comment "
 	self setCoreWord: '(' handler: [self comment ] immediate: true .            
 	self setCoreWord: '\\' handler: [self  commentLine ] immediate: true .                        
         " .net mem "
-	self setCoreWord: 'null' handler: [self null ] immediate: false.                        
+	self setCoreWord: 'null' handler: [self null ] immediate: false.                       
+	self setCoreWord: 'new' handler: [self newInstance ] immediate: false.                       
+	self setCoreWord: 'type' handler: [self getType ] immediate: false.                       
+	self setCoreWord: 'm!!' handler: [self setMember ] immediate: false.                       
+	self setCoreWord: 'm@' handler: [self getMember ] immediate: false.                       
+	self setCoreWord: 'ms!!' handler: [self setStaticMember ] immediate: false.                       
+	self setCoreWord: 'ms@' handler: [self getStaticMember ] immediate: false.                       
         " Boolean "
-	self setCoreWord: 'true' handler: [self  ] immediate: false.            
-	self setCoreWord: 'false' handler: [self  ] immediate: false.            
-	self setCoreWord: 'and' handler: [self  ] immediate: false.            
-	self setCoreWord: 'or' handler: [self  ] immediate: false.            
-	self setCoreWord: 'xor' handler: [self  ] immediate: false.            
-	self setCoreWord: 'not' handler: [self  ] immediate: false.            
-	self setCoreWord: 'invert' handler: [self  ] immediate: false.                        
-	self setCoreWord: '=' handler: [self  ] immediate: false.            
-	self setCoreWord: '<>' handler: [self  ] immediate: false.            
-	self setCoreWord: '<' handler: [self  ] immediate: false.            
-	self setCoreWord: '>' handler: [self  ] immediate: false.            
-	self setCoreWord: '<=' handler: [self  ] immediate: false.            
-	self setCoreWord: '>=' handler: [self  ] immediate: false.            
+	self setCoreWord: 'true' handler: [self true  ] immediate: false.            
+	self setCoreWord: 'false' handler: [self  false ] immediate: false.            
+	self setCoreWord: 'and' handler: [self and ] immediate: false.            
+	self setCoreWord: 'or' handler: [self or ] immediate: false.            
+	self setCoreWord: 'xor' handler: [self xor ] immediate: false.            
+	self setCoreWord: 'not' handler: [self not ] immediate: false.            
+	self setCoreWord: 'invert' handler: [self invert ] immediate: false.                        
+	self setCoreWord: '=' handler: [self eql ] immediate: false.            
+	self setCoreWord: '<>' handler: [self notEql ] immediate: false.            
+	self setCoreWord: '<' handler: [self  less ] immediate: false.            
+	self setCoreWord: '>' handler: [self greater ] immediate: false.            
+	self setCoreWord: '<=' handler: [self lessEql ] immediate: false.            
+	self setCoreWord: '>=' handler: [self  greaterEql ] immediate: false.            
         " Math "
 	self setCoreWord: '-' handler: [self minus ] immediate: false.
 	self setCoreWord: '+' handler: [self plus ] immediate: false.
@@ -365,9 +390,9 @@ initExtra
             self evalString: ': allot here @ + here !! ;'.
 
             " control flow "
-            self evalString: ': if immediate doLit [ '' 0branch , ] , here @ 0 , ;'.
+            self evalString: ': if immediate doLit [ ''  0branch , ] , here @ 0 , ;'.
             self evalString: ': then immediate dup here @ swap - swap !! ;'.
-            self evalString: ': else immediate [ '' branch , ] , here @ 0 , swap dup here @ swap - swap !! ;'.
+            self evalString: ': else immediate doLit [ '' branch , ] , here @ 0 , swap dup here @ swap - swap !! ;'.
 
             " loops "
             self evalString: ': begin immediate here @ ;'.
@@ -376,7 +401,9 @@ initExtra
             self evalString: ': while immediate doLit [ '' 0branch , ] , here @ 0 , ;'.
             self evalString: ': repeat immediate doLit [ '' branch , ] , swap here @ - , dup here @ swap - swap !! ;'.
 	" C like comment "
-            self evalString: ': // immediate [ '' \\ , ] ;'            !
+            self evalString: ': // immediate [ '' \\ , ] ;' .
+	"test from book"
+	self evalString: ': nip swap drop ;'!
 
 initialize
 	"| opHello opExit opNext opDoList |"
@@ -418,7 +445,7 @@ interpreter
  |word lookup |
 [true] whileTrue: [
 	word := self readWord: input.
-	(word isNil  or: [word = '' ]) ifTrue: [^self ].
+	word isNilOrEmpty ifTrue: [^self ].
 	lookup := self lookUp: word.
 	isEvalMode
 	ifTrue: [ "режим исполнения"
@@ -528,6 +555,13 @@ multiply
 	b := ds pop.
 	ds push: b * a!
 
+newInstance
+	| class obj|
+self halt.
+	class := ds pop.
+	obj := class new.
+	ds push: obj!
+
 next
 	[ip > 0] whileTrue: 
 			[wp := mem at: ip. " код программы состоит из адресов слов"
@@ -616,13 +650,15 @@ readString
 
 readString: aStream
 	| sb c |
+	"self halt."
 	sb := WriteStream on: String new.
 	c := aStream next.
 	[self isWhite: c] whileTrue: [c := aStream next].
-	[c == $"] whileFalse: 
+	[aStream atEnd] whileFalse: 
 			[sb nextPut: c.
-			c := aStream next].
-	^sb contents!
+			c := aStream next.
+			c == $" ifTrue: [^sb contents]].
+	^''!
 
 readWord
 	| str |
@@ -679,6 +715,12 @@ setCoreWord: aWord handler: aBlock immediate: aBool
 		immediate: aBool. " set word entry "
 	mem at: address put: address. "set core address "
 	hereP := hereP + 1. "increase here"!
+
+setMember
+	^Error notYetImplemented!
+
+setStaticMember
+	^Error notYetImplemented!
 
 skipComment: aStream params: aCharArray
 	| c |
@@ -752,7 +794,9 @@ xor
 	ds push: (b xor: [a])!
 
 zbranch
-	ip := ds pop ifTrue: [ip + 1] ifFalse: [ip + mem at: ip]! !
+	ip := ds pop
+			ifFalse: [ip + (mem at: ip)] 
+			ifTrue: [ip + 1]! !
 !Forth categoriesFor: #addHeader:!helpers!public! !
 !Forth categoriesFor: #addOp:!helpers!public! !
 !Forth categoriesFor: #and!public! !
@@ -781,6 +825,8 @@ zbranch
 !Forth categoriesFor: #dumpFrom:to:!accessing!public! !
 !Forth categoriesFor: #dup!public! !
 !Forth categoriesFor: #endDefWord!public! !
+!Forth categoriesFor: #entries!accessing!private! !
+!Forth categoriesFor: #entries:!accessing!private! !
 !Forth categoriesFor: #eql!public! !
 !Forth categoriesFor: #evalStream:!public! !
 !Forth categoriesFor: #evalString:!public! !
@@ -789,6 +835,9 @@ zbranch
 !Forth categoriesFor: #exit!public! !
 !Forth categoriesFor: #false!public! !
 !Forth categoriesFor: #getHereAddr!public! !
+!Forth categoriesFor: #getMember!accessing!public! !
+!Forth categoriesFor: #getStaticMember!accessing!public! !
+!Forth categoriesFor: #getType!accessing!public! !
 !Forth categoriesFor: #greater!public! !
 !Forth categoriesFor: #greaterEql!public! !
 !Forth categoriesFor: #hello!public! !
@@ -819,6 +868,7 @@ zbranch
 !Forth categoriesFor: #minus!public! !
 !Forth categoriesFor: #mod!public! !
 !Forth categoriesFor: #multiply!public! !
+!Forth categoriesFor: #newInstance!accessing!public! !
 !Forth categoriesFor: #next!public! !
 !Forth categoriesFor: #nop!public! !
 !Forth categoriesFor: #not!public! !
@@ -841,6 +891,8 @@ zbranch
 !Forth categoriesFor: #rs:!accessing!private! !
 !Forth categoriesFor: #searchKnowAddress:!public! !
 !Forth categoriesFor: #setCoreWord:handler:immediate:!public! !
+!Forth categoriesFor: #setMember!accessing!public! !
+!Forth categoriesFor: #setStaticMember!accessing!public! !
 !Forth categoriesFor: #skipComment:params:!public! !
 !Forth categoriesFor: #start!public! !
 !Forth categoriesFor: #swap!public! !
@@ -899,7 +951,10 @@ push: item
 
 setsize: n
    anArray := Array new: n.
-    top := 0! !
+    top := 0!
+
+size 
+	^ top! !
 !Stack categoriesFor: #at:!public! !
 !Stack categoriesFor: #clear!public! !
 !Stack categoriesFor: #peek!public! !
@@ -907,6 +962,7 @@ setsize: n
 !Stack categoriesFor: #printOn:!public! !
 !Stack categoriesFor: #push:!public! !
 !Stack categoriesFor: #setsize:!public! !
+!Stack categoriesFor: #size!public! !
 
 !Stack class methodsFor!
 
