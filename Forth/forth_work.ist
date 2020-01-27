@@ -1,0 +1,14 @@
+[:anIdeaSpace | |  aClassBrowserShell aPackageBrowserShell |
+"Create and configure a PackageBrowserShell"
+aPackageBrowserShell := anIdeaSpace newEmbeddedCardOfClass: PackageBrowserShell.
+[:aSmalltalkToolShell | aSmalltalkToolShell slideyPinMap: (Object fromLiteralStoreArray: #(#'!STL' 4 170 192 8 #()))
+] value: aPackageBrowserShell.
+
+"Create and configure a ClassBrowserShell"
+aClassBrowserShell := anIdeaSpace newEmbeddedCardOfClass: ClassBrowserShell.
+[:aClassBrowser | aClassBrowser actualClass: Forth.
+[:aSmalltalkToolShell | aSmalltalkToolShell slideyPinMap: (Object fromLiteralStoreArray: #(#'!STL' 4 170 192 8 #(#filtersSlidey true)))
+] value: aClassBrowser.] value: aClassBrowserShell.
+
+anIdeaSpace currentCardIndex: 2
+]
