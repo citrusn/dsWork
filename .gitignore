@@ -1,5 +1,5 @@
 dOPCDAClient.exe
-*.dll*
+*.dll_*
 sciter/SciterWraper/*
 *.idb
 *.pdb
@@ -12,3 +12,4 @@ WinConsoleTlb
 Forth/Универсальный DSL_ Возможно ли это - Блог компании Tinkoff_ru - Хабр_files/*
 Forth/Универсальный DSL_ Возможно ли это - Блог компании Tinkoff_ru - Хабр.htm
 
+sciter/SciterWraper.dll
