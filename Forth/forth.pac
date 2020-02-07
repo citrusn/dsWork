@@ -82,9 +82,10 @@ and
 	ds push: (b and: [a])!
 
 beginDefWord
-	self addHeader: (self readWord: input).
-	self addOp: (self lookUp: 'doList') address.
-	isEvalMode := false!
+"self halt."
+	self create.
+	self doCol.
+	self rbrac!
 
 bl
    self write: ' ' !
@@ -117,6 +118,9 @@ core: anObject
 cr
             self writeLine: ''!
 
+create
+	self addHeader: (self readWord: input)!
+
 dec
 	| a |
 	a := ds pop.
@@ -146,7 +150,10 @@ defineWord: aWord params: aSubWords
 						ifTrue: 
 							[self addOp: (self lookUp: 'doLit') address.
 							self addOp: (self parseNumber: w)]
-						ifFalse: [self writeLine: 'Unknown word ' , w]]].
+						ifFalse: 
+							[self
+								write: 'Unknown word ';
+								writeLine: w]]].
 	self addOp: (self lookUp: 'exit') address!
 
 divide
@@ -154,6 +161,9 @@ divide
 	a := ds pop.
 	b := ds pop.
 	ds push: b // a!
+
+doCol
+	self addOp: (self lookUp: 'doList') address!
 
 doList
 	rs push: ip.
@@ -167,8 +177,8 @@ dot
             self write: (ds pop) displayString!
 
 dots
-	1 to: ds size
-		do: [:i | (ds at: i) ifNotNil: [:value | self writeLine: value displayString ] ifNil: [self writeLine: 'null']]!
+	ds data
+		do: [:each | each ifNotNil: [:value | self writeLine: value displayString] ifNil: [self writeLine: 'null']]!
 
 drop
 	ds pop!
@@ -183,19 +193,29 @@ dump
 	self dumpFrom: 1 to: self here - 1!
 
 dumpFrom: intStart to: intEnd
-	self writeLine: ''.
-	self writeLine: '----- MEMORY DUMP -----'.
-	 intStart to: intEnd do:  [:i |
-			| name ka  entryWord|
+	| msg |
+	self writeLine: ''. self writeLine: '----- MEMORY DUMP -----'.
+	intStart to: intEnd do: 
+			[:i |
+			| name ka entryWord |
 			ka := self searchKnowAddress: (mem at: i).
-			name := '???'.
+			name := '???'.  entryWord := nil.
 			entries
 				keysAndValuesDo: [:eachKey :eachValue | eachValue do: [:wh | wh address == ka ifTrue: [name := eachKey]]].
 			entries
 				keysAndValuesDo: [:eachKey :eachValue | eachValue do: [:wh | wh address == i ifTrue: [entryWord := eachKey]]].
-		entryWord isNilOrEmpty ifFalse: [self  writeLine: ''. self writeLine: entryWord displayString ].
-		self writeLine: '[ ', i displayString, ' ]  -> ' , (mem at: i) displayString, ' : "', name, '"'.
-]!
+			entryWord isNilOrEmpty  ifFalse: 
+					[self writeLine: ''.  self writeLine: entryWord displayString].
+			msg := String writeStream: 32.
+			msg
+				nextPutAll: '[ ';
+				nextPutAll: i displayString;
+				nextPutAll: ' ]  -> ';
+				nextPutAll: (mem at: i) displayString;
+				nextPutAll: ' : "';
+				nextPutAll: name;
+				nextPut: $".
+			self writeLine: msg contents]!
 
 dup
 	| a |
@@ -204,7 +224,7 @@ dup
 
 endDefWord
 	self addOp: (self lookUp: 'exit') address.
-	isEvalMode := true.
+	self lbrac.
 	lastWordHeader isEnable: true!
 
 entries
@@ -378,6 +398,7 @@ initCore
 	self setCoreWord: 'over' handler: [self over] immediate: false.
 	self setCoreWord: 'rot' handler: [self rot ] immediate: false.
 	self setCoreWord: 'nrot' handler: [self nrot ] immediate: false.
+	self setCoreWord: 'create' handler: [self create ] immediate: false.
          
 	self here: hereP + 1
 	!
@@ -387,7 +408,8 @@ initExtra
             self evalString: ': ? @ . ;'.
 
             " Allocate n bytes "
-            self evalString: ': allot here @ + here !! ;'.
+            "self evalString: ': allot here @ + here !! ;'."
+            self evalString: ': allot here @ dup nrot + here !! ;'. "на стеке остается старое here"
 
             " control flow "
             self evalString: ': if immediate doLit [ ''  0branch , ] , here @ 0 , ;'.
@@ -396,8 +418,10 @@ initExtra
 
             " loops "
             self evalString: ': begin immediate here @ ;'.
+
             self evalString: ': until immediate doLit [ '' 0branch , ] , here @ - , ;'.
             self evalString: ': again immediate doLit [ '' branch , ] , here @ - , ;'.
+
             self evalString: ': while immediate doLit [ '' 0branch , ] , here @ 0 , ;'.
             self evalString: ': repeat immediate doLit [ '' branch , ] , swap here @ - , dup here @ swap - swap !! ;'.
 	" C like comment "
@@ -557,7 +581,6 @@ multiply
 
 newInstance
 	| class obj|
-self halt.
 	class := ds pop.
 	obj := class new.
 	ds push: obj!
@@ -698,7 +721,7 @@ rs: anObject
 
 searchKnowAddress: anInt
 	| addresses ka |
-	anInt  ifNil: [ ^-1 ].
+	anInt ifNil: [^-1].
 	addresses := OrderedCollection new.
 	entries valuesDo: [:each | each do: [:wh | addresses add: wh address]].
 	addresses sort.
@@ -810,10 +833,12 @@ zbranch
 !Forth categoriesFor: #core!accessing!private! !
 !Forth categoriesFor: #core:!accessing!private! !
 !Forth categoriesFor: #cr!public! !
+!Forth categoriesFor: #create!public!realizing/unrealizing! !
 !Forth categoriesFor: #dec!public! !
 !Forth categoriesFor: #define:entry:immediate:!accessing!helpers!public! !
 !Forth categoriesFor: #defineWord:params:!helpers!public! !
 !Forth categoriesFor: #divide!public! !
+!Forth categoriesFor: #doCol!public! !
 !Forth categoriesFor: #doList!helpers!public! !
 !Forth categoriesFor: #doLit!public! !
 !Forth categoriesFor: #dot!public! !
@@ -927,6 +952,9 @@ at: anIndex
 clear
 	top := 0!
 
+data
+	^ anArray!
+
 peek
 	^anArray at: top!
 
@@ -957,6 +985,7 @@ size
 	^ top! !
 !Stack categoriesFor: #at:!public! !
 !Stack categoriesFor: #clear!public! !
+!Stack categoriesFor: #data!public! !
 !Stack categoriesFor: #peek!public! !
 !Stack categoriesFor: #pop!public! !
 !Stack categoriesFor: #printOn:!public! !
