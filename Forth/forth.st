@@ -24,12 +24,14 @@ f ds clear
 
 f here 
 f dump
-f evalString: ': const create  '' doList  , '' doLit ,  ,  '' exit ,  ;'
-f evalString: '34 const dd dd'
+f evalString: ': const create  doLit [ '' doList , ] , doLit [ '' doLit , ] , , doLit [ '' exit , ] ,  ;'
+f evalString: '34 const dd '
+f evalString: ' dd '
 
 f evalString: ': var0 variable  11123 swap !  ;'
 f evalString: 'var0 dd dd'
 f evalString: ': allot here @ dup nrot + here ! ;'
+16rFFFF - 16rF800
 
 f evalString: ' 3 allot'
 
@@ -73,3 +75,6 @@ f evalString: ' : else immediate doLit [ '' branch , ] , here @ 0 , swap dup her
 self evalString: ': then immediate dup here @ swap - swap ! ;'.
 dolist dup gethereaddr readmem swap minus swap writemem exit
 
+'HELLO' collect: [:each | each codePoint printStringBase: 16]
+
+ 

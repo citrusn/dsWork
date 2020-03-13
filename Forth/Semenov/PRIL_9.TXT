@@ -1,0 +1,1715 @@
+                             Приложение 9
+
+               Форт-интерпретатор для персональной ЭВМ
+
+
+   Приведенный текст  интерпретатора соответствует стандарту FIG-FORTH
+и ориентирован  на  персональную  ЭВМ  типа  IBM  PC  (т.е.  близок  к
+Форт-79).  Его  можно  адаптировать  и  к  стандарту Форт-83.  При его
+написании  ставилась  задача  сохранения   возможности   использования
+библиотек  и  прикладных программ,  реализованных для модифицированной
+версии FIG-FORTH в  ИТЭФ.  Интерпретатор  имеет  некоторые  слова  для
+работы с периферийным оборудованием (PORT,  READ),  а также операторы,
+предназначенные для представления информации на экране (SCL,  PIX, LCL
+и   т.д.).  Данную  версию  можно  рассматривать  в  качестве  примера
+реализации интерпретатора на простом процессоре.  Здесь сознательно не
+использованы  многие  команды процессора 80286 и некоторые возможности
+BIOS версии EGA AT для того, чтобы сделать эту программу приемлемой на
+ЭВМ   более   простой   конфигурации.  Интерпретатор  работает  как  с
+монохромными  (MG-150,  HERCULES),  так  и  с  цветными   (CGA,   EGA)
+графическими  адаптерами.  В  последнем  случае  экранный  редактор  и
+некоторые  другие  библиотеки   предоставляют   пользователю   большие
+возможности.    Воспользовавшись    данным    текстом,    вы   сможете
+модифицировать эту версию Форт  в  соответствии  с  вашими  вкусами  и
+привычками. Некоторые программы, приведенные в данной книге (например,
+программа,  исполняющая мелодию "Подмосковные вечера"),  написаны  для
+данной  версии интерпретатора.  Программы составлена на ассемблере ЭВМ
+IBM PC и рассчитана на работу с виртуальным файлом FORTH.DAT на гибком
+диске  "A".  Если  вас  не  устраивает,  можно  снять это ограничение,
+отредактировав FCB в конце текста или  воспользовавшись  другой  более
+совершенной версией интерпретатора.
+
+
+   ;                  FORTH ИТЭФ  1988 Семенов Ю.А.
+
+   LINK=0
+   .LALL
+   ;                       Макроопределения
+   ; Описание примитивов и слов высокого уровня
+   HEAD  MACRO length,name,lchar,labl,code
+   LINK$=$
+        DB  length
+        IFNB <NAME>
+        DB  NAME
+        ENDIF
+        DB  lchar
+        DW  LINK
+   LINK=LINK$
+   labl    LABEL   FAR
+        IFNB <code>
+        pw  code
+        ELSE
+        DW  $+2
+        ENDIF
+        ENDM
+
+   NEXT MACRO   ; переход к исполнению следующего слова
+
+        LODSW
+        MOV  BX, AX
+        JMP  [BX]
+        ENDM
+
+        TITLE   FORTH Interpreter
+
+   ARRAY   SEGMENT
+   $TIME   DW  0,0                     ; TIMER COUNTER
+   $DATE   DW  0                       ; DATE
+
+   ;  Сегмент стека и словарь пользователя размещен в конце текста
+   ;  интерпретатора. Для версии, записываемой в ПЗУ, их нужно
+   ;  разместить здесь.
+
+   DSKBUF  DW  3 DUP(0,512 DUP(0),0)   ; Экранные буферы
+   ENDBUF  DW  0
+
+   XTIB    DW  92 DUP(0)               ; Входной буфер
+   XR0     DW  0,0                     ; Стек возвратов
+   XUP     DW  102 DUP(0)              ; USER-область
+
+   $STI    DW  TASK-7Q ;               ; Стартовая таблица
+   $US     DW  XUP     ;+2
+   $STK    DW  XS0     ;+4
+   $RS     DW  XR0     ;+6
+           DW  XTIB    ;+8
+           DW  37Q     ;+10
+           DW  0       ;+12
+           DW  XDP     ;+14
+           DW  XDP     ;+16
+           DW  XVOC    ;+18
+   $BUF    DW  DSKBUF  ;+20
+           DW  ENDBUF  ;+22
+
+       ASSUME  CS:ARRAY, DS:ARRAY, ES:ARRAY, SS:STACK
+
+   $INI      PROC    FAR
+             JMP  ENT
+   ; ** PRIMITIVES **
+
+             HEAD    203Q,'IN',311Q,INIT                  ;INI
+   ENT:      MOV   CX, ARRAY
+             MOV   DS, CX          ; Установка DX
+             MOV   ES, CX
+             MOV   BX, $US
+             MOV   AX, $STI        ; Восстановление словаря
+             LEA   SI, FORTH+6
+             MOV   [SI], AX
+             MOV   SI, $BUF
+             MOV   CX, 1730        ; Установка счетчика
+   XXX:      MOV   WORD PTR [SI],0 ; Обнуление массивов
+             ADD   SI, 2
+             LOOP  XXX
+
+   ; INIT 'OFFSET, USE, PREV
+
+             MOV   CX, $BUF         ; TO 'USE'
+             MOV   [BX]+72Q,CX
+             MOV   [BX]+74Q,CX      ; ?
+             MOV   CX, 14Q          ; Установка счетчика USER
+             MOV   DI, $US          ; Запись адреса области USER
+             ADD   DI, 6
+             LEA   SI, $STK         ; Запись начального адреса
+   REP       MOVS  WORD PTR ES:[DI],HORD PTR DS:[SI]
+             MOV   BP, $RS          ; Установка начального значения
+             MOV   DI, $US          ; указателя стека возвратов
+             MOV   WORD PTR [DI+32Q],7  ; Установка цвета
+             MOV   WORD PTR [DI+42Q],0  ; Сброс флага печати
+             LEA   SI, G0$
+             NEXT
+   G0$:      DW SPSTO,DEC,FORTH,DEFIN,ONE,LOAD
+   $INI      ENDP
+
+   ; BX - WP                      BP - указатель стека возвратов
+   ; SI - IP-регистр              SP - указатель стека параметров
+   ; DI - указатель области USER
+
+             HEAD    207Q,'EXECUT',305Q,EXEC              ; EXECUTE
+             POP   BX
+             JMP   [ BX ]
+
+             HEAD    203Q,'LI',324Q,LIT                   ; LIT
+             LODSW
+             PUSH  AX
+             NEXT
+
+             HEAD    206Q,'TEBMO',316Q,TEBMON             ; TEKMON
+             POP   AX
+             PUSH  ES
+             HOV   CX, 0
+             MOV   ES, CX
+             MOV   ES:417H,AX
+             POP   ES
+             NEXT
+
+             HEAD    207Q,'?BRANC',310Q,ZBRAN             ; ?BRANCH
+   ; Ветвление при нуле в стеке (FALSE)
+             POP   AX
+             CMP   AX, 0
+             JE    CUT
+             ADD   SI, 2
+             NEXT
+
+             HEAD    206Q,'BRANC',310Q,BRAN               ; BRANCH
+   CNT:      ADD   SI,  [SI]
+             NEXT
+
+             HEAD    2040,'(DO',251Q,XD0                  ; (D0)
+             POP   AX
+             SUB   BP, 2
+             POP   [BP]
+             SUB   BP, 2
+             HOV   WORD PTR  [BP],AX
+             NEXT
+
+             HEAD    206Q,'(LOOP',251Q.XLOOP              ; (LOOP)
+   ; Приращение индекса цикла LOOP и может быть  ветвление
+             INC   WORD PTR  [BP]
+   LOP:      MOV   AX,  [BP]
+             CHP   AX,  2[BP]
+             JL    CNT
+   LV:       ADD   BP,  4
+             ADD   SI,  2
+             NEXT
+
+             HEAD    207Q,'(+LOOP',251Q,XPLOO             ; (+LOOP)
+             POP   AX
+             ADD   [BP],   AX
+             CMP   AX, 0
+             JL    $LESS
+             JMP   LOP
+   $LESS:    MOV   CX, [BP]   ; Работа с отрицательными приращениями
+             CMP   [BP]+2, CX
+             JLE   LV
+             JMP   CNT
+
+             HEAD    206Q,'(FIND',251Q,PFIND              ; PFIND
+   ; Адрес строки  NFA => PFA длина TRUE/FALSE
+             POP   AX
+             POP   CX
+             PUSH  BP         ; сохранение содержимого регистров
+             PUSH  SI
+             PUSH  DI
+             MOV   SI, CX
+             SUB   BP, BP
+             MOV   DI, AX
+             MOV   DX,WORD PTR [SI]
+             AND   DX, 77577Q
+             CLD                    ; DF=0 (вперед)
+   FAST:     MOV   CX,WORD PTR [DI]
+             AND   CX, 77477Q
+             CMP   DX, CX
+             JE    SLOW
+   MATCH:    CMP   WORD PTR [DI], 0
+             JS    $SIG             ; BPL
+             INC   DI
+             JMP   MATCH
+   $SIG:     ADD   DI, 2
+             CMP   WORD PTR [DI],0
+             JE    FAIL
+             MOV   DI,WORD PTR [DI]
+             JMP   FAST
+   SLOW:     MOV   BP,WORD PTR [DI]
+             MOV   BX, SI
+             JMP   SLOW1
+   $LOOP:    INC   BX
+             MOV   AX,WORD PTR [BX]
+             MOV   CX,WORD PTR [DI]
+             AND   CX, 77777Q
+             CMP   AX, CX
+             JNE   MATCH
+   SLOW1!    INC   DI
+             TEST  WORD PTR -1[DI],100000Q
+             JE    $LOOP
+             MOV   DX, BP
+             ADD   DI, 5
+             HOV   AX, DI
+             POP   DI         ; восстановление содержимого регистров
+             POP   SI
+             POP   BP
+             SUB   AX, 2
+             PUSH  AX
+             AND   DX, 377Q        ; байт длины
+             PUSH  DX              ; в стек
+             JMP   TRUE            ; Установка флага "Найдено"
+   FAIL:     POP   DI
+             POP   SI
+             POP   BP
+             JMP   FALSE
+
+             HEAD    205Q,'DIGI',324Q,DIGIT               ; DIGIT
+   ; ASCII-DIGIT BASE=>DIGIT-VALUE TRUE (FALSE)
+             POP   AX      ; AX=BASE
+             POP   CX
+             SUB   CX, 60Q ; VALID DIGIT = ASCII-60
+             JL    FALSE
+             CMP   CX, 9   ; Если >9
+             JLE   M09
+             SUB   CX, 7
+             CMP   CX, 10
+             JL    FALSE
+   M09:      CMP   CX, AX  ; Если не меньше BASE, то ошибка
+             JGE   FALSE
+             PUSH  CX      ; Запись цифры в стек
+             JMP   TRUE    ; "Успешный" выход
+
+   ;         **  Стандартные слова  **
+   ;         **  Условные операторы  **
+
+             HEAD    202Q,'0',275Q,ZEQU                   ; 0=
+             POP   AX
+             CMP   AX,  0
+             JE    TRUE
+   FALSE:    SUB   AX,  AX
+   PUT:      PUSH  AX
+             NEXT
+   TRUE:     MOV   AX,  1
+             JMP   PUT
+
+             HEAD    202Q,'0',276Q,ZGRET                  ; 0>
+             POP   AX
+             CMP   AX, 0
+             JG    TRUE
+             JMP   FALSE
+
+             HEAD    202Q,'0',274Q,ZLESS                  ; 0<
+             POP   AX
+             CMP   AX, 0
+             JS    TRUE         ; Если минус
+             JMP   FALSE
+
+             HEAD    201Q,,275Q,EQUAL                     ; =
+             POP   AX
+             POP   CX
+             CMP   CX, AX
+             JE    TRUE
+             JMP   FALSE
+
+             HEAD    202Q,'U',274Q,ULESS                  ; U<
+             POP   AX
+             POP   CX
+             CMP   CX, AX
+             JB    TRUE             ; для чисел без знака
+             JMP   FALSE
+
+             HEAD    201Q,,274Q,LESS                      ; <
+             POP   AX
+             POP   CX
+             CMP   AX, CX
+             JG    TRUE
+             JMP   FALSE
+
+             HEAD    201Q,,276Q,GREAT                     ; >
+             POP   AX
+             POP   CX
+             CMP   AX, CX
+	     JL    TRUE
+             JMP   FALSE
+
+   ;         ******************
+
+             HEAD    204Q,'ENC',314Q,ENCL                 ; ENCLOSE
+             POP   AX         ; разделитель
+
+             POP   CX         ; начальный адрес
+             MOV   BX, CX
+   A:        CMP   BYTE PTR  [BX], AL ; обход разделителей в начале
+             JNE   NOTEQ
+   AAA:      INC   BX
+             JMP   A
+   NOTEQ:    CMP   BYTE PTR  [BX], 15Q
+             JE    AAA
+             CMP   BYTE PTR  [BX], 12Q
+             JE    AAA
+             MOV   DX, BX               ; начало лексемы
+             PUSH  DX
+   AA:       CMP   BYTE PTR  [BX],  0
+             JE    ZZZ                  ; если нуль
+             CMP   BYTE PTR  [BX], AL  ; не нуль, ищем конец лексемы
+             JE    QW
+             INC   BX
+             JMP   AA
+   EQW:      MOV   AX, BX
+             SUB   BX, DX
+             PUSH  BX
+             SUB   AX, CX
+             INC   AX
+             PUSH  AX
+             NEXT
+   ZZZ:      CHP   BX, DX
+             JNE   EQW
+             INC   BX
+             JMP   EQW
+
+   ;         ** Дисплей **
+
+             HEAD    204Q,'PAG',305Q,$PAGE                ; PAGE
+   ; Установка активной страницы ( PAGE --)
+             POP   AX
+             MOV   AH, 5
+             INT   16
+             NEXT
+
+             HEAD    203Q,'PI',330Q,PIX                   ; PIX
+   ; COLCOD ROW COLUMN -->  -    запись графической точки
+             POP   CX                  ; колонка
+             POP   BX                  ; строка
+             POP   AX                  ; код цветности
+             PUSH  DX                  ; сохранение DX
+             MOV   AH, 12
+             MOV   DX, BX
+             SUB   DH, DH
+             INT   16                  ; запись графической точки
+             POP   DX                  ; восстановление DX
+             NEXT
+
+             HEAD    204Q,'MOD',301Q,MODA                 ; MODA
+   ; Изменение режима. ( М --> - )
+             POP   AX
+             SUB   AH, AH
+             IN    16
+             NEXT
+
+             HEAD    203Q,'EM',311Q,EMI$                  ; EMI
+             POP   CX              ; Число символов
+             POP   AX              ; Символ
+             PUSH  CX              ; Сохранение содержимого CX
+             PUSH  AX              ; Сохранение содержимого AХ
+             MOV   BX, [DI+32Q]    ; Установка атрибута
+             MOV   AH, 15          ; Чтение текущей страницы
+             INT   16              ; в BH
+             POP   AX              ; Восстановление содержимого AX
+             MOV   AH, 9           ; Запись строки символов
+             INT   16
+             MOV   AH, 3           ; Чтение положения курсора
+             INT   16
+             POP   CX
+             ADD   DL, CL
+             MOV   AH, 2           ; Установка положения курсора
+   $EM:      INT   16
+             CMP   WORD PTR [DI+42Q),0
+             JNE   PRINT
+   OK:       NEXT
+
+             HEAD    204Q,'EMI',324Q,EMIT,$EMIT           ; EMIT
+   $EMIT     LABEL   FAR
+             POP   AX
+   ENT$:     PUSH  AX
+             MOV   AH, 15
+             INT   16
+             POP   AX
+             MOV   AH, 14
+             JMP   $EM
+   PRINT:    MOV   DX, 0   ; Установка номера принтера
+             SUB   AH, AH
+             INT   23
+             TES   AH, 51Q
+             JE    OK
+   ERR4:     MOV   AL, AH
+             ADD   AL, 60Q
+             MOV   AH, 14
+             INT   16
+             MOV   DX, OFFSET ERMES4
+             MOV   AH, 9H
+             INT   21H
+             JMP   TYPE$
+   ERMES4:   DB   ' PRINTER ERROR $'
+
+             HEAD    202Q,'R',303Q,RC                     ; RC
+             MOV   AX, 13
+             JMP   ENT$
+
+             HEAD    202Q,'I',314Q,IL                     ; BELL
+             MOV   AX, 7
+             JMP   ENT$
+
+             HEAD    204Q,'PRI',316Q,PRIN             ; PRINT-FLAG
+             INC   WORD PTR  [DI+42Q]
+             MOV   DX,  0       ; Установка номера принтера
+             MOV   AH,  1       ; Инициализация принтера
+             INT   17H
+             TEST  AH,  51Q
+             JNE   ERR4
+             NEXT
+
+             HEAD    203Q,'TT',331Q,TTY              ; TERMI-FLAG
+   TYPE$:    MOV   WORD PTR [DI+42Q],0
+             NEXT
+
+             HEAD    203Q,'SC',314Q,SCL                   ; SCL
+   ; SCREEN CLEAR
+             MOV   CX, 2048     ; Загрузка счетчика
+             MOV   AH, 15
+             INT   16           ; Установка текущей страницы
+             SUB   DX, DX
+             MOV   AH, 2        ; Курсор в исходное положение
+             INT   16
+             MOV   BL, 7
+   CLEAR:    MOV   AX, 0920H    ; Очистка экрана
+             INT   16
+             NEXT
+
+             HEAD    203Q,'FI',330Q,FIX                   ; FIX
+   ; Позиционирование курсора: COL ROW FIX
+             MOV   AH, 15
+             INT   10H      ; Запись текущего номера страницы в BX
+             POP   DX
+             MOV   DH, DL   ; строка
+             POP   AX
+
+             MOV   DL, AL    ; столбец
+             MOV   AH, 2
+             INT   10H       ; Фиксация положения курсора
+             NEXT
+
+             HEAD    204Q,'DSP',314Q,DSPL                 ; DSPL
+   ; LOAD GRAFBUFFER (b adr DSPL)
+             POP   BX  ; адрес
+             POP   AX  ; байт
+             PUSH  ES  ; сохранение регистра сегмента
+             MOV   CX, 0B000H ; GRAFBUF
+             MOV   ES, CX
+             MOV   BYTE PTR ES:[BX], AL
+             POP   ES
+             NEXT
+
+   ;         ** Терминал **
+
+             HEAD    203Q,'KE',331Q,KEY                   ; KEY
+             SUB   AH, AH
+             INT   22
+             SUB   AH, AH
+             PUSH  AX
+             NEXT
+
+             HEAD    206Q,'EXPEC',324Q,EXPE               ; EXPECT
+             MOV   AH, 0AH
+             POP   CX                   ; Число символов
+             POP   BX                   ; Адрес буфера SS
+             MOV   BYTE PTR [BX],  CL   ; Засылка ожидаемого числа
+             MOV   DX, BX
+             INT   21H
+
+             MOV   AL, BYTE PTR [BX+1]
+             SUB   AH, AH
+             ADD   BX, AX
+             MOV   WORD PTR [BX+2],0
+             NEXT
+
+             HEAD    205Q,'?TER',244Q,?TER$               ; ?TER$
+             PUSH  ES
+             SUB   CX, CX
+             MOV   ES, CX
+             OR    BYTE PTR ES:[417H],  40Q
+   TER:      MOV   AH, 1
+             INT   22
+             JE    TER
+             SUB   AH, AH
+             INT   22
+             AND   BYTE PTR ES:[417H],337Q  ; Сброс "NUM LOCK"
+             POP   ES              ; Восстановление ES
+             PUSH  AX              ; Запись символа
+             NEXT
+
+   ; ** Ввод/Вывод **
+
+             HEAD    204Q,'POR',324Q,PORT                 ; PORT
+             POP   DX
+             POP   AX
+             OUT   DX, AL
+             NEXT
+             HEAD    204Q,'REA',304Q,READ                 ; READ
+             POP   DX
+             IN    L, DX
+             SUB   AH, AH
+             PUSH  AX
+             NEXT
+
+   ;         ** Арифметика **
+
+             HEAD    202Q,'1',253Q.ONEP                   ; 1+
+             POP   AX
+             INC   AX
+             PUSH  AX
+             NEXT
+
+             HEAD    202Q,'2',253Q,TWOP                   ; 2+
+             POP   AX
+             ADD   AX, 2
+             PUSH  AX
+             NEXT
+
+             HEAD    202Q,'1',255Q,ONEM                   ; 1-
+             POP   AX
+             DEC   AX
+             PUSH  AX
+             NEXT
+
+             HEAD    202Q,'2',252Q,MUL2                   ; 2*
+             POP   AX
+             SAL   AX,  1
+             PUSH  AX
+             NEXT
+
+             HEAD    202Q,'2',257Q,DIV2                   ; 2/
+             POP   AX
+             SAR   AX, 1
+             PUSH  AX
+             NEXT
+
+             HEAD    202Q, 'U', 252Q,USTAR                ; U*
+             POP   AX
+             POP   CX
+             MUL   CX
+             PUSH  AX
+             PUSH  DX
+             NEXT
+
+             HEAD    202Q,'U',257Q,USLAS                  ; U/
+             POP   CX          ; Делитель
+             POP   DX
+             POP   AX
+             DIV   CX
+             PUSH  DX          ; Остаток
+             PUSH  AX          ; Засылка  результата
+             NEXT
+
+             HEAD    202Q,'M',252Q,MSTAR                  ; M*
+             POP   AX
+             POP   CX
+             IMUL  CX
+             PUSH  AX
+             PUSH  DX
+             NEXT
+
+             HEAD     206Q,'DMIHU',323Q,DMINU             ; DMINUS
+   ; Изменение знака числа двойной длины
+             POP  AX
+   DMIN:     NEG  AX
+             POP  CX
+             NEG  CX
+             SBB  AX, 0       ; sub with borrow
+             PUSH CX
+             PUSH AX
+   G$:       NEXT
+
+            HEAD     204Q,'DAB',323Q,DABS                 ; DABS
+            POP   AX
+            CMP   AX, 0
+            JS    DMIN
+            PUSH  AX
+            NEXT
+
+            HEAD     202Q,'M',257Q,MSLAS                  ; M/
+            POP   CX          ; Делимое
+            POP   DX
+            POP   AX
+            IDIV  CX
+            PUSH  DX
+            PUSH  AX
+
+            NEXT
+
+            HEAD     201Q,,253Q,PLUS                      ; +
+            POP  AX
+            POP  CX
+            ADD  AX, CX
+            PUSH AX
+            NEXT
+
+            HEAD     201Q,,255Q,SUB                       ; -
+            POP  CX
+            POP  AX
+            SUB  AX, CX
+            PUSH AX
+            NEXT
+
+            HEAD     202Q,'D',2530,DPLUS                  ; D+
+            POP  AX
+            POP  CX
+            MOV  BX, SP
+            ADD  SS:[BX+2],  CX
+            ADC  SS:[BX],    AX
+            NEXT
+
+            HEAD     205Q,'MINU',323Q,MINUS               ; MINUS
+            POP  AX
+            NEG  AX
+            PUSH AX
+            NEXT
+
+            HEAD     204Q,'SWA',302Q,SWAB                 ; SWAB
+            POP  AX
+            XCHG AL, AH
+            PUSH AX
+            NEXT
+
+            HEAD     203Q,'AB',323Q,ABS                   ; ABS
+            POP  AX
+            CMP  AX, 0
+            JNS  AB
+            NEG  AX
+   AB:      PUSH AX
+            NEXT
+
+            HEAD     203Q,'AN',304Q,$AND                  ; AND
+            POP  AX
+            POP  CX
+            AND  AX,  CX
+   ENDA:    PUSH AX
+            NEXT
+
+            HEAD     202Q,'0',322Q,$OR                    ; OR
+            POP  AX
+            POP  CX
+            OR   AX, CX
+            JMP  ENDA
+
+            HEAD     203Q,'X0',322Q,$XOR                  ; XOR
+            POP  AX
+
+            POP  CX
+            XOR  AX, CX
+            JMP  ENDA
+
+            HEAD     204Q,'S->',304Q,STOD                 ; S->D
+            POP  AX
+            PUSH AX
+            MOV  CX, DX           ; Сохранение содержимого DX
+            CWD
+            PUS  DX
+            MOV  DX, CX           ; Восстановление DX
+            NEXT
+
+            HEAD     203Q,'MI',316Q,MIN                   ; MIN
+            POP  AX
+            POP  CX
+            CMP  CX,  AX
+            UL  DEEP
+   TOP:     PUSH AX
+            NEXT
+   DEEP:    PUSH CX
+            NEXT
+
+            HEAD     203Q,'MA',330Q,MAX                   ; MAX
+            POP  AX
+            POP  CX
+            CMP  CX, AX
+            JGE  DEEP
+            JMP  TOP
+
+            HEAD     203Q,'SP',300Q,SPAT                  ; SP@
+            MOV  AX, SP
+            JMP  ENDA
+            HEAD     203Q,'SP',241Q,SPSTO                 ; SP!
+            MOV  SP, [DI]+6
+            NEXT
+
+            HEAD     203Q,'RP',241Q,RPSTO                 ; RP!
+            MOV  BP, $RS
+            NEXT
+
+            HEAD     202Q,';',323Q,SEMI                   ; ;S
+            MOV  SI, [BP]
+            ADD  BP, 2
+            NEXT
+
+   ;        ** Стек возвратов **
+
+            HEAD     205Q 'LEAV'305Q,LEAVE                ; LEAVE
+	    MOV  AX [BP]
+            MOV  [BP]+2, AX
+            NEXT
+
+            HEAD     202Q,'>',322Q,TOR                    ; >R
+            SUB  BP, 2
+            POP  [BP]
+            NEXT
+
+	    HEAD     202Q 'R',276Q,FROMR                  ; R>
+	    PUSH [BP]
+            ADD  BP, 2
+            NEXT
+
+            HEAD     201Q,,311Q,I                         ; I
+  RR$:      PUSH [BP]
+  Z$:       NEXT
+
+            HEAD     201Q,,322Q,R                         ; R
+            JMP  RR$
+
+            HEAD     202Q,'I',247Q,SRP                    ; I'
+            PUSH 2[BP]
+            JMP  Z$
+
+            HEAD     203Q,'LE',326Q,LEV                   ; LEV
+            ADD  BP, 2
+            NEXT
+
+            ** Операции со стеком параметров **
+
+            HEAD     204Q,'PIC',313Q,PICK                 ; PICK
+            POP  BX
+	    CMP  BX,  0
+            JLE  $GO
+            DEC  BX
+            SAL  BX, 1
+            ADD  BX, SP
+            PUSH SS:[BX]
+   $GO:     NEXT
+
+            HEAD     204Q,'OVE',322Q,OVER                 ; OVER
+            MOV  BX, SP
+	    PUSH SS:[BX]+2
+            NEXT
+            HEAD     204Q,'SWA',320Q,SWAP                 ; SWAP
+	    POP  CX
+	    POP  AX
+	    PUSH CX
+	    PUSH AX
+	    NEXT
+
+            HEAD     205Q,'2SWA',320Q,DSWAP               ; 2SWAP
+            POP  AX
+            POP  CX
+            MOV  BX,  SP
+            MOV  DX,WORD PTR SS:[BX+2]
+            PUSH DX
+            MOV  DX,WORD PTR SS:[BX]
+            PUSH DX
+            MOV  WORD  PTR SS:[BX],AX
+            MOV  WORD  PTR SS:[BX+2],CX
+            NEXT
+
+            HEAD     203Q,'DU',320Q,DUBL                  ; DUP
+            POP  AX
+
+   DU:      PUSH AX
+   C$:      PUSH AX
+            NEXT
+
+            HEAD     204Q,'-DU',320Q,DDUP                 ; -DUP
+            POP  AX
+            CMP  AX,  0
+            JNE  DU
+            JMP  C$
+
+            HEAD     204Q,'2DU',320Q,DUP2                 ; 2DUP
+            POP  AX
+            POP  CX
+            PUSH CX
+            PUSH AX
+            PUSH CX
+            PUSH AX
+            NEXT
+
+            HEAD     203Q,'RO',324Q,ROT                   ; ROT
+            POP  AX
+            POP  CX
+            POP  BX
+            PUSH CX
+            PUSH AX
+            PUSH BX
+            NEXT
+
+            HEAD     205Q,'2DRO',320Q,DDROP               ; 2DROP
+   DRO:     ADD  SP, 4
+            NEXT
+
+            HEAD     204Q,'DRO',320Q,DROP                 ; DROP
+   DRP:     ADD  SP, 2
+            NEXT
+
+   ;        ** Работа с памятью **
+
+            HEAD     205Q,'CMOV',305Q,CMOVE               ; CMOVE
+            POP  CX         ; Счетчик
+            CMP  CX,  0
+            JLE  PRO
+            MOV  AX,  DI     ; Сохранение содержимого DI,SI
+            MOV  BX,  SI
+            POP  DI          ; Куда
+            POP  SI          ; Откуда
+   REP      MOV  ES:  BYTE PTR [DI], DS:[SI]
+            MOV  DI, AX      ; Восстановление DI,SI
+            MOV  SI, BX
+            NEXT
+
+            HEAD     204Q,'FIL',314Q,FILL                 ; FILL
+            POP  AX      ; Символ
+   FLL:     POP  CX      ; Счетчик символов
+            CMP  CX, 0
+            JLE  DRP     ;
+            POP  BX
+   $REPE:   MOV  BYTE PTR [BX],  AL
+            INC  BX
+
+            LOOP $REPE
+            NEXT
+
+            HEAD     205Q,'ERAS',305Q,ERASE               ; ERASE
+            SUB  AX, AX
+            JMP  FLL
+
+            HEAD     206Q,'BLANK',323Q,BLANK              ; BLANKS
+            MOV  AX, 32
+            JMP  FLL
+
+            HEAD     204Q,'HOL',304Q,HOLD                 ; HOLD
+            DEC  WORD PTR  [DI]+70Q
+            POP  AX
+            MOV  BX,  [DI+70Q]
+            MOV  BYTE PTR [BX], AL
+            NEXT
+
+            HEAD     202Q,'+',241Q,PSTOR                  ; +!
+            POP  BX
+            POP  CX
+            ADD  [BX], CX
+            NEXT
+
+            HEAD     204Q,'TOG',314Q.TOGL                 ; TOGGLE
+   ; адр-байта маска =>XOR в байт памяти
+            POP  CX         ; Маска
+            POP  BX
+            XOR  BYTE PTR [BX],CL
+            NEXT
+
+            HEAD     201Q,,300Q,AT                        ; @
+            POP  BX
+            PUSH [BX]
+            NEXT
+
+            HEAD     202Q,'C',300Q,CAT                    ; C@
+            POP  BX
+            MOV  AL, BYTE PTR [BX]
+            SUB  AH, AH
+            PUSH AX
+            NEXT
+            HEAD     201Q,,241Q,STORE                     ; !
+            POP  BX
+            POP  AX
+            MOV  [BX],   AX
+            NEXT
+
+            HEAD     202Q,'C',241Q,CSTOR                  ; C!
+            POP  BX
+            POP  AX
+            MOV  BYTE PTR [BX],  AL
+            NEXT
+
+            HEAD     203Q,'NF',301Q,NFA                   ; NFA
+            POP  BX
+            SUB  BX, 5
+            MOV  CX, -1
+
+            JMP  TRV
+
+            HEAD     203Q,'LF',301Q,LFA                   ; LFA
+            POP  AX
+            SUB  AX, 4
+            PUSH AX
+            NEXT
+
+            HEAD     203Q,'CF',301Q,CFA                   ; CFA
+            POP  AX
+            SUB  AX, 2
+            PUSH AX
+            NEXT
+
+            HEAD     204Q,'!CS',320Q,SCSP                 ; !CSP
+            MOV  WORD PTR [DI]+64Q,SP
+            NEXT
+
+            HEAD     204Q,'HER',305Q,HERE                 ; HERE
+            PUSH [DI]+22Q
+            NEXT
+
+            HEAD     205Q,'ALLO',3240,ALLOT               ; ALLOT
+            POP  BX
+            ADD  [DI]+22Q,BX
+            NEXT
+
+            HEAD     204Q,'TRA',326Q,TRAV                 ; TRAVERSE
+   ; Движение вперед/назад вдоль имени переменной длины
+            POP  CX      ; DELTA
+            POP  BX
+   TRV:     ADD  BX, CX
+            CMP  BYTE PTR [BX],  0
+            JNS  TRV     ; JUMP IF POSITIVE
+            PUSH BX
+            NEXT
+
+            HEAD     301Q,,333Q,LBRAC                     ; [
+   ; Прекращение компил., начало исполн. (обнуление STATE)
+            MOV  WORD PTR [DI]+54Q,0
+            NEXT
+
+            HEAD     301Q,,335Q,RBRAC                     ; ]
+            MOV  WORD PTR [DI]+54Q,300Q   ; Начало компиляции
+            NEXT
+
+            HEAD     203Q,'HE',330Q,$HEX                  ; HEX
+            MOV  WORD PTR [DI+56Q],16
+            NEXT
+
+            HEAD     207Q,'DECIMA',314Q,DEC               ; DECIMAL
+            MOV  WORD PTR [DI]+56Q,10
+            NEXT
+
+            HEAD     205Q,'OCTA',314Q,OCTAL               ; OCTAL
+            MOV  WORD PTR [DI]+56Q,  8
+   Y$:      NEXT
+
+            HEAD     206Q,'LATES',324Q,LATES              ; LATEST
+            MOV  BX, [DI+52Q]
+            PUSH [BX]
+            NEXT
+
+            HEAD     206Q,'-TRAI',314Q,DTRAI              ; -TRAIL
+            POP  CX
+            POP  BX
+            PUSH BX
+            ADD  BX, CX
+   COMPA:   DEC  BX
+            CMP  BYTE PTR [BX],  32  ; BLANK ?
+            JNE  NO
+            LOOP COMPA
+   NO:      PUSH CX
+            NEXT
+
+            HEAD     205Q,'UPPE',3220,UPPER               ; UPPER
+            POP  CX
+            POP  BX
+   $COMP:   CMP  BYTE PTR [BX],  141Q
+            JL   OFLIM
+            CMP  BYTE PTR [BX],  172Q
+            JG   OFLIM
+            AND  [BX],   177737Q
+   OFLIM:   INC  BX
+            LOOP $COMP
+            NEXT
+
+            HEAD     213Q,'DEFINITION',323Q,DEFIN      ; DEFINITIONS
+            MOV  AX, 50Q[DI]
+            MOV  52Q[DI],AX
+            NEXT
+
+            HEAD     204Q,'+BU',306Q,PBUF                 ; +BUF
+            MOV  BX, SP
+            ADD  SS:[BX],1028
+            MOV  AX, SS:[BX]
+            CMP  30Q[DI],AX      ; LIMIT
+            JNE  PB
+            MOV  CX, 26Q[DI]     ; FIRST
+            MOV  SS:[BX],CX
+   PB:      PUSH SS:[BX]
+            MOV  CX, 74Q[DI]
+            SUB  SS:[BX-2],CX
+            NEXT
+
+            HEAD     206Q,'UPDAT',305Q,UPDAT              ; UPDATE
+            MOV  BX, 74Q[DI]
+            OR   [BX],   100000Q
+            NEXT
+
+            HEAD     201Q,,330Q,X                         ; X
+            POP  BX
+            AND  [BX],   77777Q
+            PUSH [BX]
+            NEXT
+
+   ;        ** Управляющие слова **
+
+            HEAD     301Q,,272Q,COLON,$COL                ; :
+            DW QEXEC,SCSP,CURR,AT,CONT,STORE,CREAT
+            DW RBRAC,PSCOD
+   $COL     LABEL   FAR
+            ADD  BP, -2
+            ADD  BX, 2
+            MOV  [BP],   SI
+            MOV  SI, BX
+            NEXT
+
+            HEAD     301Q,,273Q,SMI,$COL                  ; ;
+            DW QCSP,COMP,SEMI,SMUG,LBRAC,SEMI
+
+            HEAD     210Q,'CONSTAN',324Q,CON,$COL         ; CONSTANT
+            DW CREAT,SMUG,COMMA,PSCOD                                ;
+   $CON     LABEL   FAR
+            ADD  BX, 2
+            PUSH [BX]
+            NEXT
+
+            HEAD     210Q, 'VARIABL',305Q,VAR,$COL        ; VARIABLE
+            DW CON,PSCOD
+   $VAR     LABEL   FAR
+            ADD  BX, 2
+            PUSH BX
+            NEXT
+
+            HEAD     204Q,'USE',322Q,USER, $COL           ; USER
+            DW CON,PSCOD
+   $USE   LABEL   FAR
+            ADD  BX, 2
+            MOV  AX, [BX]
+            ADD  AX, DI
+            PUSH AX
+            NEXT
+
+            HEAD     205Q,'DOES',276Q,DOES,$COL           ; DOES>
+            DW  FROMR,LATES,PFA,STORE,PSCOD
+   $DOE     LABEL   FAR
+            SUB  BP,  2
+            ADD  BX, 2
+            MOV  [BP],   SI
+            MOV  SI, [BX]
+            ADD  BX, 2
+            PUSH BX
+            NEXT
+
+   ;        ** Константы **
+
+            HEAD     201Q,,260Q,ZERO,$CON                 ; 0
+            DW 0
+            HEAD     201Q,,261Q,ONE,$CON                  ; 1
+            DW 1
+
+            HEAD     201Q,,262Q,TWO,$CON                  ; 2
+            DW 2
+
+            HEAD     201Q,,263Q,THREE,$CON                ; 3
+            DW 3
+
+            HEAD     201Q,,270Q,EIGHT, $CON               ; 8
+            DW 8
+
+            HEAD     202Q,'B',314Q,BLAN,$CON              ; BL
+            DW 40Q
+
+            HEAD     202Q,'C',314Q,$CL,$CON               ; C/L
+            DW 64   ;CHAR# PER LINE
+
+            HEAD     202Q,'1',313Q,BBUF,$CON              ; BBUF
+            DW 1024
+
+            ** USER-переменные **
+
+            HEAD     202Q,'S',260Q,SZERO,$USE             ; SO
+            DW 6
+
+            HEAD     202Q,'R',260Q,RZERO,$USE             ; RO
+            DW 8
+
+            HEAD     203Q, 'TI',302Q,TIB,$USE             ; TIB
+            DW 12Q  ;Входной буфер терминала
+
+            HEAD     205Q,'WIDT',310Q,$WIDTH,$USE         ; WIDTH
+            DW 14Q
+
+            HEAD     207Q,'WARNIN',307Q.WARN,$USE         ; WARNING
+            DW 16Q
+
+            HEAD     205Q,'FENC',3050,FENCE,$USE          ; FENCE
+            DW 20Q
+
+            HEAD     202Q,'D',320Q,DP,$USE                ; DP
+            DW 22Q
+
+            HEAD     204Q,'VOC',314Q,VOCL,$USE            ; VOCL
+            DW 24Q
+
+            HEAD     205Q,'FIRS',324Q,FIRST,$USE          ; FIRST
+            DW 26Q
+
+            HEAD     205Q,'LIMI',324Q,LIMIT,$USE          ; LIMIT
+            DW 30Q
+
+            HEAD     203Q,'AT',322Q,ATR,$USE              ; ATR
+            DW 32Q          ;Атрибут
+
+            HEAD     202Q,'P',307Q,PG,$USE                ; PG
+            DW 34Q          ; Текущая страница
+
+            HEAD     203Q,'BL',313Q,BLK,$USE              ; BLK
+            DW 36Q
+
+            HEAD     202Q,'I',316Q,IN,$USE                ; IN
+            DW 40Q
+
+            HEAD     203Q,'PN',324Q,PNT,$USE              ; PNT
+            DW 42Q          ;Флаг-печати
+
+            HEAD     203Q,'SC',322Q,SCR,$USE              ; SCR
+            DW 44Q
+
+            HEAD     206Q,'OFFSE',324Q,OFSET,$USE         ; OFFSET
+            DW 46Q
+
+            HEAD     207Q,'COMTEX',324Q,CONT,$USE         ; CONTEXT
+            DW 50Q
+
+            HEAD     207Q, 'CURREN',324Q,CURR,$USE        ; CURRENT
+            DW 52Q
+
+            HEAD     205Q,'STAT',3050,STATE,$USE          ; STATE
+            DW 54Q  ;0=> Исполнение
+
+            HEAD     204Q,'BAS',305Q,BASE,$USE            ; BASE
+            DW 56Q
+
+            HEAD     203Q,'DP',314Q,DPL,$USE              ; DPL
+            DW 60Q
+
+            HEAD     203Q,'CS',320Q,CSP,$USE              ; CSP
+            DW 64Q
+
+            HEAD     202Q,'R',243Q,RNUM,$USE              ; R#
+            DW 66Q
+
+            HEAD     203Q,'HL',304Q,HLD,$USE              ; HLD
+            DW 70Q
+
+            HEAD     203Q,'US',305Q,USE,$USE              ; USE
+            DW 72Q
+
+            HEAD     204Q,'PRE',326Q,PREV,$USE            ; PREV
+            DW 74Q
+
+            HEAD     203Q,'$E',330Q,$EX,$USE              ; EXP
+            DW 76Q
+
+            HEAD     203Q,'ER',302Q,ERB,$USE              ; ERB
+            DW 100Q
+
+            ** Слова высокого уровня **
+
+            HEAD     205Q,'?TER',315Q,?TERM,$COL          ; ?TERM
+            DW ?TER$,LIT,377Q,$AND,SEMI
+
+            HEAD     202Q,'C',322Q,CR,$COL                ; CR
+            DW LIT,15Q,EMIT,LIT,12Q,EMIT,SEMI
+
+            HEAD     201Q,,254Q,COMMA,$COL                ; ,
+            DW HERE,STORE,TWO,ALLOT,SEMI
+
+            HEAD     202Q,'C',254Q,CCOM,$COL              ; C,
+            DW HERE,CSTOR,ONE,ALLOT,SEMI
+
+   HEAD      205Q,'SPAC',305Q,SPACE,$COL                  ; SPACE
+             DW BLAN,EMIT,SEMI
+
+             HEAD    203Q,'PF'301Q,PFA,$COL               ; PFA
+             DW  ONE,TRAV,LIT,5,PLUS,SEMI
+
+             HEAD    203Q,'?E',322Q,QERR,$COL             ; PER
+             DW  SWAP,ZBRAN,TTT-$,ERROR,SEMI
+   TTT:      DW  DROP,SEMI
+
+             HEAD    205Q,'?COM',320Q,QCOMP,$COL          ; ?COMP
+             DW  STATE,AT,ZEQU,LIT,21Q,QERR,SEMI
+
+             HEAD    205Q,'?EXE',303Q,QEXEC,$COL          ; ?EXEC
+             DW  STATE,AT,LIT,22Q,QERR,SEMI
+
+             HEAD    205Q,'?PAI',322Q,QPAIR,$COL          ; ?PAIR
+             DW  SUB,LIT,23Q,QERR,SEMI
+
+             HEAD    204Q,'?CS',320Q,QCSP,$COL            ; ?CSP
+             DW  SPAT,CSP,AT,SUB,LIT,24Q,QERR,SEMI
+
+             HEAD    205Q,'?LOA',304Q,QLOAD,$COL          ; ?LOAD
+             DW  BLK,AT,ZEQU,LIT,26Q,QERR,SEMI
+
+             HEAD    207Q,'COMPIL',305Q,COMP,$COL         ; COMPILE
+
+   ; Компиляция исполнительного адреса, следующего за оператором
+
+             DW  QCOMP,I,FROMR,TWOP,TOR,AT,COMMA,SEMI
+
+             HEAD    204Q,'SMU',307Q,SMUG,$COL            ; SMUDGE
+             DW  LATES,BLAN,TOGL,SEMI
+
+             HEAD    207Q,'(;CODE',251Q,PSCOD,$COL        ; (;CODE)
+             DW  FROMR,LATES,PFA,CFA,STORE,SEMI
+
+             HEAD    207Q,'<BUILD',323Q,BUILD,$COL        ; <BUILDS
+             DW  ZERO,CON,SEMI
+
+             HEAD    205Q,'COUN',324Q,COUNT,$COL          ; COUNT
+             DW  DUBL,ONEP,SWAP,CAT,SEMI
+
+             HEAD    204Q,'TYP',305Q,$TYPE,$COL           ; TYPE
+             DW  DDUP,ZBRAN,TC1-$,ZERO,XD0
+
+   TCO:      DW  DUBL,I,PLUS,CAT,LIT,177Q,$AND
+             DW  ONE,EMI$,XLOOP,TC0-$
+
+   TC1:      DW  DROP,SEMI
+
+             HEAD    204Q,'(."',251Q,PD0TQ,$COL           ; (.")
+             DW  I,COUNT,DUBL,ONEP
+             DW  FROMR,PLUS,TOR,$TYPE,SEMI
+
+             HEAD    302Q,'.',242Q,D0TQ,$COL              ; ."
+             DW  LIT,34,STATE,AT,ZBRAN,XT-$
+             DW  COMP,PDOTQ,$WORD,HERE,CAT,ONEP
+             DW  ALLOT, SEMI
+
+   XT:       DW  $WORD,HERE,COUNT,$TYPE,SEMI
+
+             HEAD    205Q,'QUER',331Q,QUERY,$COL          ; QUERY
+             DW  TIB,AT,CFA,LIT,120Q,EXPE,ZERO,IN,STORE,CR,SEMI
+             HEAD    301Q,,200Q,NULL,$COL                 ; NULL
+             DW  BLK,AT,ZBRAN,NUL-$
+             DW  ONE,BLK,PSTOR,ZERO,IN,STORE,QEXEC
+
+   NUL:      DW  LEV,SEMI
+
+             HEAD    203Q,'PA',304Q,PAD,$COL              ; PAD
+             DW  HERE,LIT,104Q,PLUS,SEMI
+
+             HEAD    204Q,'WOR',304Q,$WORD,$COL           ; WORD
+             DW  BLK,AT,DDUP,ZBRAN,WD1-$,BLOCK,BRAN,WD2-$
+   WD1:      DW  TIB,AT
+   WD2:      DW  IN,AT,PLUS,SWAP,ENCL,HERE,BLAN,BLANK,IN
+             DW  PSTOR,TOR,I,HERE,CSTOR
+             DW  HERE,ONEP,FROMR,CMOVE,SEMI
+
+             HEAD    210Q,'(NUMBER',251Q,PNUMB,$COL       ; (NUMBER)
+   BN:       DW  ONEP,TOR,I,CAT,BASE,AT,DIGIT,ZBRAN,MMO-$
+             DW  SWAP,BASE,AT,USTAR,DROP,ROT,BASE,AT,USTAR
+             DW  DPLUS,DPL,AT,ONEP,ZBRAN,BN1-$,ONE,DPL,PSTOR
+   BN1:      DW  FROMR,BRAN,BN-$
+   MM0:      DW  FROMR,SEMI
+
+             HEAD    205Q,'-FIN',304Q,DFIND,$COL          ; -FIND
+             DW  BLAN,$WORD,HERE,COUNT,UPPER,HERE,CONT,AT,AT
+             DW  PFIND,DDUP,ZEQU,ZBRAN,FIN-$,HERE,LATES,PFIND
+   FIN:      DW  SEMI
+
+             HEAD    206Q,'NUMBE',322Q,NUMB,$COL          ; NUMBER
+             DW  ZERO,$EX,STORE,BASE,AT,ZERO,ROT
+             DW  ONEP,DUBL,CAT,DUBL,LIT,53Q,EQUAL
+             DW  ZBRAN,NH1-$,DEC,DROP,BRAN,NH4-$
+   NH1:      DW  DUBL,LIT,55Q,EQUAL,ZBRAN,NH2-$,DROP,DEC
+             DW  SWAP,DROP,ONE,SWAP,BRAN,NH4-$
+   NH2:      DW  LIT,47Q,EQUAL,ZBRAN,NH3-$,OCTAL,ONEP
+   NH3:      DW  ONEM
+   NH4:      DW  LIT,-1,DPL,STORE,ZERO,ZERO,ROT,PNUMB,DUBL
+             DW  CAT,BLAN,SUB,ZBRAN,NH6-$
+             DW  DUBL,CAT,LIT,56Q,EQUAL,ZBRAN,EXP-$
+             DW  ZERO,DPL,STORE,PNUMB,DUBL,CAT,BLAN,SUB,ZBRAN,NH6-$
+   EXP:      DW  DPL,AT,SWAP,DUBL,CAT,LIT
+             DW  105Q,EQUAL,ZBRAN,ER1-$,ONEP,DUBL,CAT
+             DW  LIT,55Q,EQUAL,ZBRAN,NEMI-$,ONE,BRAN,NHO-$
+   NEMI:     DW  DUBL,CAT,LIT,53Q,SUB,ZBRAN,PLU-$,ONEM
+   PLU:      DW  ZERO
+   NH0:      DW  SWAP,ZERO,ZERO,ROT,PNUMB,CAT,BLAN,EQUAL,ZBRAN,ER-$
+             DW  DROP,SWAP,ZBRAN,NH5-$,MINUS
+   NH5:      DW  $EX,STORE,DPL,STORE,ZERO
+   NH6:      DW  DROP,ROT,ZBRAN,NH7-$,DMINU
+   NH7:      DW  ROT,BASE,STORE,SEMI
+   ER:       DW  DDROP,DROP
+   ER1:      DW  DDROP,DDROP,DROP,ZERO,ERROR,SEMI
+
+             HEAD    205Q,'ERRO',322Q,ERROR,$COL          ; ERROR
+             DW  HERE,COUNT,$TYPE,PDOTQ
+             DB  3 , ' ? '
+             DW  ERB,AT,ZBRAN,XER-$
+             DW  ZERO,ERB,STORE,DROP,SEMI
+   XER:      DW  MESS,SPSTO,QUIT
+
+             HEAD    203Q,'ID',256Q,IDDOT,$COL            ; ID.
+             DW  COUNT,LIT,37Q,$AND,$TYPE,SPACE,SEMI
+
+             HEAD    206Q,'CREAT',305Q,GREAT,$COL         ; CREATE
+             DW  DFIND,ZBRAN,CRE-$,DROP,TWOP,NFA,IDDOT
+             DW  LIT,4,MESS
+   CRE:      DW  HERE,DUBL,CAT,$WIDTH,AT,MIN,ONEP,ALLOT
+             DW  DUBL,LIT,240Q,TOGL,HERE,ONEM
+             DW  LIT,2OOQ,TOGL,LATES,COMMA,CURR,AT,STORE
+             DW  HERE,TWOP,COMMA,SEMI
+
+             HEAD    311Q,'[COMPILE',335Q,BCOM,$COL       ; [COMPILE]
+             DW  DFIND,ZEQU,ZERO,QERR,DROP,COMMA,SEMI
+
+             HEAD    307Q,'LITERA',314Q,LITER,$COL        ; LITERAL
+             DW  STATE,AT,ZBRAN,LIL-$,COMP,LIT,COMMA
+   LIL:      DW  SEMI
+
+             HEAD    310Q,'DLITERA',314Q,DLITE,$COL       ; DLITERAL
+             DW  STATE,AT,ZBRAN,DLI-$,SWAP,LITER,LITER
+   DLI:      DW  SEMI
+
+             HEAD    206Q,'?STAC',313Q,QSTAC,$COL         ; ?STACK
+             DW  SZERO,AT,CFA,SPAT,ULESS,ONE,QERR
+             DW  LIT,-200Q,SPAT,ULESS,TWO
+             DW  QERR, SEMI
+
+             HEAD    211Q,'INTERPRE',324Q,INTER,$COL      ; INTERPRET
+   IT1:      DW  DFIND,ZBRAN,IT3-$,STATE,AT,LESS
+             DW  ZBRAN,IT2-$,COMMA,BRAN,IT5-$
+   IT2:      DW  EXEC,BRAN,IT5-$
+   IT3:      DW  HERE,NUMB,DPL,AT,ONEP,ZBRAN,IT4-$,DLITE,BRAN,IT5-$
+   IT4:      DW  DROP,LITER
+   IT5:      DW  QSTAC,BRAN,IT1-$
+
+             HEAD    211Q,'IMMEDIAT',305Q,IMMED,$COL      ; IMMEDIATE
+             DW  LATES,$CL,TOGL,SEMI
+
+             HEAD    212Q,'VOCABULAR',331Q,VOCAB,$COL     ; VOCABULARY
+             DW  BUILD,LIT,120201Q,COMMA,CURR,AT,CFA,COMMA
+             DW  HERE,VOCL,AT,COMMA,VOCL,STORE,DOES
+   DOVOC     LABEL    FAR
+             DW  TWOP,CONT,STORE,SEMI
+
+             HEAD    301Q,,250Q,PAREN,$COL                ; (
+             DW  LIT,51Q,$WORD,SEMI
+
+             HEAD    204Q,'QUI',324Q,QUIT,$COL            ; QUIT
+             DW  ZERO,BLK,STORE,LBRAC
+   QUI:      DW  RPSTO,CR,QUERY,INTER,STATE,AT
+             DW  ZEQU,ZBRAN,QUI-$,PDOTQ
+             DB  3,'  OK'
+             DW  BRAN,QUI-$
+
+             HEAD    205Q,'ABOR',324Q,ABORT,$COL          ; ABORT
+             DW  SPSTO,DEC,CR,PDOTQ
+             DB  17,'FORTH-PC IS HERE '
+             DW  FORTH,DEFIN,QUIT
+
+             HEAD    202Q,'S',256Q,SPOT,$COL              ; S.
+             DW  DUBL,UDOT,SEMI
+
+             HEAD    201Q,,252Q,STAR,$COL                 ; *
+             DW  MSTAR,DROP,SEMI
+
+             HEAD    204Q,'/MO',304Q,SLMOD,$COL           ; /MOD
+             DW  TOR,STOD,FROMR,MSLAS,SEMI
+             HEAD    201Q,,257Q,SLASH,$COL                ; /
+             DW  SLMOD,SWAP,DROP,SEMI
+
+             HEAD    203Q,'MO',304Q,$MOD,$COL             ; MOD
+             DW  SLMOD,DROP,SEMI
+
+             HEAD    205Q,'*/MO',304Q,SSMOD,$COL          ;. */MOD
+             DW  TOR,MSTAR,FROMR,MSLAS,SEMI
+
+             HEAD    202Q,'*',257Q,SSLA,$COL              ; */
+             DW  SSMOD,SWAP,DROP,SEMI
+
+             HEAD    205Q,'M/MO',304Q,MSMOD,$COL          ; M/MOD
+             DW  TOR,ZERO,I,USLAS,FROMR,SWAP,TOR,USLAS
+   $MO:      DW  FROMR,SEMI
+
+             HEAD    215Q,'EMPTY-BUFFER',323Q,HTBUF,$COL  ;EMPTY-BUFF
+             DW  FIRST,AT,LIT,3084,ERASE,SEMI
+
+             HEAD    205Q,'FLUS',310Q,FLUSH,$COL          ; FLUSH
+             DW  LIMIT,AT,FIRST,AT,XDO
+   FLU:      DW  I,AT,ZLESS,ZBRAN,FL1-$
+             DW  I,TWOP,I,X,ZERO,RW
+   FL1:      DW  LIT,1028,XPLOO,FLU-$,MTBUF,SEMI
+
+             HEAD    206Q,'BUFFE',322Q,BUFFE,$COL         ; BUFFER
+             DW  USE,AT,TOR,I
+   BR1:      DW  PBUF,ZBRAN,BR1-$,USE,STORE
+             DW  I,AT,ZLESS,ZBRAN,BR2-$
+             DW  I,TWOP,I,X,ZERO,RW
+   BR2:      DW  I,STORE,I,PREV,STORE,FROMR,TWOP,SEMI
+
+             HEAD    205Q,'BLOC',313Q,BLOCK,$COL          ; BLOCK
+             DW  OFSET,AT,PLUS,TOR
+             DW  PREV,AT,DUBL,X,I,SUB,ZBRAN,BLC-$
+   BLO:      DW  PBUF,ZEQU,ZBRAN,BCK-$
+             DW  DROP,I,BUFFE,DUBL,I,ONE,RW,CFA
+   BCK:      DW  DUBL,X,I,SUB,ZEQU
+             DW  ZBRAN,BLO-$,DUBL,PREV,STORE
+   BLC:      DW  FROMR,DROP,TWOP,SEMI
+
+             HEAD    205Q,'.LIN',305Q,DLINE,$COL          ; .LINE
+             DW  TOR,$CL,BBUF,SSMOD,FROMR,PLUS,BLOCK
+             DW  PLUS,$CL,DTRAI,$TYPE,SEMI
+
+             HEAD    207Q,'MESSAG',305Q,MESS,$COL         ; MESSAGE
+             DW  IN,AT,RNUM,STORE,WARN,AT,ZBRAN,MS1-$
+             DW  DDUP,ZBRAN,MES-$,LIT,4,OFSET,AT,SUB,DLINE
+   MES:      DW  SEMI
+   MS1:      DW  PDOTQ
+
+             DB  6,'MSG # '
+             DW $DOT,SEMI
+
+             HEAD    204Q,'LOA',304Q,LOAD,$COL            ; LOAD
+             DW  BLK,AT,IN,AT,ZERO,IN,STORE,ROT,BLK
+             DW  STORE,INTER,IN,STORE,BLK,STORE,SEMI
+
+             HEAD    303Q,'--',276Q,ARROW,$COL            ; -->
+             DW  QLOAD,ZERO,IN,STORE,ONE
+             DW  BLK,PSTOR,SEMI
+             HEAD    301Q,,247Q,TICK,$COL                 ; '
+             DW  DFIND,ZEQU,ZERO,QERR,DROP,TWOP,LITER,SEMI
+
+             HEAD    206Q,'FORGE',324Q,FORGE,$COL         ; FORGET
+             DW  CURR,AT,CONT,AT,SUB,LIT,30Q,QERR,TICK
+             DW  DUBL,FENCE,AT,ULESS,LIT,25Q,QERR,DUBL,NFA
+             DW  DP,STORE,LFA,AT,CONT,AT,STORE,SEMI
+
+             HEAD    204Q,'BAC',313Q,BACK,$COL            ; BACK
+             DW  HERE,SUB,COMMA,SEMI
+
+             HEAD    305Q,'BEGI',316Q,BEGIN,$COL          ; BEGIN
+             DW  QCOMP,HERE,ONE,SEMI
+
+             HEAD    304Q,'THE',316Q,THEN,$COL            ; THEN
+             DW  QCOMP,TWO,QPAIR,HERE,OVER,SUB,SWAP,STORE,SEMI
+
+             HEAD    302Q,'D',317Q,$DO,$COL               ; DO
+             DW  COMP,XDO,HERE,THREE,SEMI
+
+             HEAD    304Q,'LOO',320Q,LOOP,$COL            ; LOOP
+             DW  THREE,QPAIR,COMP,XLOOP,BACK,SEMI
+
+             HEAD    305Q,'+LOO',320Q,PLOOP,$COL          ; +LOOP
+             DW  THREE,QPAIR,COMP,XPLOO,BACK,SEMI
+
+             HEAD    305Q,'UNTI',314Q,UNTIL,$COL          ; UNTIL
+             DW  ONE,QPAIR,COMP,ZBRAN,BACK,SEMI
+
+             HEAD    306Q,'REPEA',324Q,REPEAT,$COL        ; REPEAT
+             DW  ROT,ONE,QPAIR,ROT,COMP,BRAN,BACK
+             DW  THEN,SEMI
+
+             HEAD    302Q,'I',306Q,$IF,$COL               ; IF
+             DW  COMP,ZBRAN,HERE,ZERO,COMMA,TWO,SEMI
+
+             HEAD    304Q,'ELS',305Q,$ELSE,$COL           ; ELSE
+             DW  TWO,QPAIR,COMP,BRAN,HERE,ZERO,COMMA
+             DW  SWAP,TWO,THEM,TWO,SEMI
+
+             HEAD    305Q,'WHIL',305Q,WHILE,$COL          ; WHILE
+             DW  $IF,SEMI
+
+             HEAD    206Q,'SPACE',323Q,SPACS,$COL         ; SPACES
+             DW  ZERO,MAX,DDUP,ZBRAN,SP1-$,ZERO,XDO
+   SPA:      DW  SPACE,XLOOP,SPA-$
+   SP1:      DW  SEMI
+
+             HEAD    202Q,'<',243Q,BDIGS,$COL             ; <#
+             DW  PAD,HLD,STORE,SEMI
+
+             HEAD    202Q,'#',276Q,EDIGS,$COL             ; #>
+             DW  DDROP,HLD,AT,PAD,OVER,SUB,SEMI
+
+             HEAD    204Q,'SIG',316Q,SIGN,$COL            ; SIGN
+             DW  ROT,ZLESS,ZBRAN,SIG-$,LIT,55Q,HOLD
+   SIG:      DW  SEMI
+
+             HEAD    201Q,,243Q,DIG,$COL                  ; #
+             DW  BASE,AT,MSMOD,ROT,LIT,11Q,OVER,LESS
+             DW  ZBRAN,DIGI-$,LIT,7,PLUS
+   DIGI:     DW  LIT,60Q,PLUS,HOLD,SEMI
+             HEAD    202Q,'#',323Q,DIGS,$COL              ; #S
+   DIS:      DW  DIG,DUP2,$OR,ZEQU,ZBRAN,DIS-$,SEMI
+
+             HEAD    203Q,'D.',322Q,DDOTR,$COL            ; D.R
+             DW  TOR,SWAP,OVER,DABS,BDIGS,DIGS,SIGN,EDIGS
+             DW  FROMR,OVER,SUB,SPACS,$TYPE,SEMI
+
+             HEAD    202Q,'.',3220,DOTR,$COL              ; .R
+             DW  TOR,STOD,FROMR,DDOTR,SEMI
+
+             HEAD    203Q,'U.',322Q,UDOTR,$COL            ; U.R
+             DW  ZERO,SWAP,DDOTR,SEMI
+
+             HEAD    202Q,'D',256Q,DDOT,$COL              ; D.
+             DW  ZERO,DDOTR,SPACE,SEMI
+
+             HEAD    201Q,,256Q,$DOT,$COL                 ; .
+             DW  STOD,DDOT,SEMI
+
+             HEAD    201Q,,277Q,QUEST,$COL                ; ?
+             DW  AT,$DOT,SEMI
+
+             HEAD    202Q,'U',256Q,UDOT,$COL              ; U.
+             DW  ZERO,DDOT,SEMI
+
+   ;         ** Вспомогательные процедуры **
+
+             HEAD    204Q,'LIS',324Q,$LIST,$COL           ; LIST
+             DW  DEC,CR,DUBL,SCR,STORE,PDOTQ
+             DB  3,'S#  '
+             DW  $DOT,LIT,20Q,ZERO,XDO
+   LSTI:     DW  CR,I,THREE,DOTR,SPACE
+             DW  I,SCR,AT,DLINE,XLOOP,LSTI-$,CR,SEMI
+
+             HEAD    205Q,'INDE',330Q,INDEX,$COL          ; INDEX
+             DW  ONEP,SWAP,XDO
+   INDX:     DW  CR,I,THREE,DOTR,SPACE,ZERO,I,DLINE
+             DW  XLOOP,INDX-$,SEMI
+
+             HEAD    204Q,'TRI',317Q,TRIO,$COL            ; TRIO
+             DW  LIT,14Q,EMIT
+             DW  THREE,OVER,PLUS,SWAP,XDO
+   TRI:      DW  I,$LIST,XLOOP,TRI-$,SEMI
+
+             HEAD    205Q,'VLIS',324Q,VLIST,$COL          ; VLIST
+             DW  CONT,AT,AT
+   VL0:      DW  CR,THREE,ZERO,XDO
+   VL1:      DW  DUBL,IDDOT,LIT,15Q,OVER,CAT,LIT,37Q,$AND,SUB
+             DW  SPACS,PFA,DUBL,LIT,6,UDOTR,SPACE,LIT,41Q
+             DW  EMIT,SPACE,LFA,AT,DUBL,ZEQU,ZBRAN,VL2-$
+             DW  LEAVE
+   VL2:      DW  XLOOP,VL1-$,DDUP,ZEQU,ZBRAN,VLO-$,SEMI
+
+             HEAD    203Q,'LC',314Q,LCL,$COL              ; LCL
+             DW  ZERO,ZERO,FIX,$CL,SPACS,RC,SEMI
+
+             HEAD    202Q,'H',324Q,HT,$COL                ; HT
+             DW  ZERO,ZERO,FIX,SEMI
+
+             HEAD    204Q,'COP',331Q,COPY,$COL            ; COPY
+             DW  SWAP,BLOCK,CFA,STORE,UPDAT,FLUSH,SEMI
+             HEAD    202Q,'T>,331Q,TY$$,$COL              ; TY
+             DW  ZERO,XDO
+   TY4:      DW  I,EIGHT,$MOD,ZEQU,ZBRAN,TY5-$
+             DW  CR,DUBL,LIT,7,UDOTR
+   TY5:      DW  DUBL,AT,LIT,7,UDOTR,TWOP,XLOOP,TY4-$,SEMI
+
+             HEAD    205Q,'DEPT',310Q,DEPTH,$COL          ; DEPTH
+             DW  SZERO,AT,SPAT,TWOP,SUB,DIV2,SEMI
+
+             HEAD    204Q,'DUM',32OQ,DUMP,$COL            ; DUMP
+             DW  ZERO,XDO
+   DMP:      DW  DUBL,LIT,7,UDOTR,SPACE,EIGHT,ZERO,XDO
+   DP1:      DW  DUBL,I,PLUS,CAT,LIT,5,DOTR,XLOOP,DP1-$
+             DW  LIT,4,SPACS,EIGHT,ZERO,XDO
+   DP2:      DW  DUBL,I,PLUS,CAT,LIT,1770,$AND,DUBL,BLAN
+             DW  LESS,ZBRAN,DP3-$,DROP,LIT,56Q
+   DP3:      DW  EMIT,XLOOP,DP2-$,CR,EIGHT,PLUS,EIGHT
+             DW  XPLOO,DMP-$,DROP,SEMI
+
+             HEAD    204Q,'SWA',3230,SWAS,$COL            ; SWAS
+             DW  TOR,BLOCK,CFA,DUBL,AT,I,BLOCK,CFA,STORE,UPDAT
+             DW  FROMR,LIT,100000Q,$OR,SWAP,STORE,FLUSH,SEMI
+
+             HEAD    203Q,'ST',331Q,STY,$COL              ; STY
+             DW  DEPTH,DDUP,ZBRAN,STY3-$,ZERO,XDO
+   STY1:     DW  I,EIGHT,$MOD,ZEQU,ZBRAN,STY2-$,CR
+   STY2:     DW  I,ONEP,PICK,LIT,7,UDOTR,XLOOP,STY1-$
+   STY3:     DW  SEMI
+
+             HEAD    202Q,'O',256Q,ODOT,$COL              ; O.
+             DW  BASE,AT,OVER,OCTAL,UDOT,BASE,STORE,SEMI
+
+             HEAD    203Q,'R/',327Q,RW                    ; R/W
+
+   ; Открытие файла
+
+             MOV   DX, OFFSET FCB
+             MOV   AH, 0FH
+             INT   21H
+             CMP   AL, 0FFH
+             JE    ERR0
+             POP   BX  ; R/W - флаг
+             POP   AX  ; Номер блока
+             POP   DX  ; Адрес буфера
+             DEC   AX
+             MOV   CL, 3
+             SAL   AX, CL  ; (BLOCK#-1)*8
+             MOV   RANDREC,AX
+             MOV   RANDREC+2,0
+             CMP   BX, 0
+             JNE   RED
+   ; WRITE
+             MOV   BX, DX
+             MOV   CX, 8      ; Номер записи
+   WR:       MOV   DX, BX
+             MOV   AH,1AH     ; Запись адреса буфера
+             INT   21H
+             MOV   DX,OFFSET FCB
+             MOV   AH, 22Н    ; Запись RECORD
+             INT   21H
+             CMP   AL, 0
+             JNE   ERR1
+             INC   RANDREC    ; Коррекция адреса буфера
+             ADD   BX, 80H
+             LOOP  WR
+             JMP   OUT
+   RED:      MOV   CX, 8
+             MOV   BX, DX
+   RD:       MOV   DX, BX
+             MOV   AH, 1AH     ; Запись адреса буфера
+             INT   21H
+             MOV   DX, OFFSET  FCB
+             MOV   AH, 21Н
+             INT   21H
+             CMP   AL, 0
+             JNE   ERR3
+             INC   RANDREC     ; Коррекция адреса
+             ADD   BX, 80H
+             LOO   RD
+   OUT:      MOV   DX, OFFSET  FCB  ; Закрытие файла
+             MOV   AH, 10H
+             INT   21H
+             CMP   AL, 0
+             JNE   ERR2
+   EXIT:     NEXT
+   ERR0:     MOV   DX, OFFSET  ERMESO
+             JMP   DONE
+   ERR1:     MOV   DX, OFFSET  ERMES1
+             JMP   DONE
+   ERR2:     MOV   DX, OFFSET  ERMES2
+             JMP   DONE
+   ERR3:     MOV   DX, OFFSET  ERMES3
+   DONE:     MOV   AH, 9Н
+             INT   21H
+             JMP   EXIT
+
+             HEAD    305Q,';COD',305Q,SEMIC,$COL          ; ;CODE
+             DW  QCSP,COMP,PSCOD,LBRAC,SMUG,SEMI
+
+             HEAD    305Q,'FORT',310Q,FORTH,$DOE          ; FORTH
+             DW  DOVOC,120201Q,TASK-7
+   XVOC      LABEL   FAR
+             DW  0
+
+             HEAD    2040,'TAS',3130,TASK,$COL            ; TASK
+             DW  SEMI
+
+   FCB       LABEL WORD
+   DRIVE     DB    1
+   FN        DB    'FORTH   '
+   EXT       DB    'DAT'
+   CURBLK    DW    0          ; Относительное начало файла
+   RECSIZE   DW    80H
+   FILESIZE  DW    5000,0
+   DATE      DB    0,0
+             DB    0,0,0,0,0, 0,0,0,0,0
+   CURREC    DB    0
+   RANDREC   DW    0,0
+   ERMES0    DB    'ERR OPENING FILE$'
+   ERMES1    DB    'ERR WRITING FILE$'
+   ERMES2    DB    'ERR CLOSING FILE$'
+   ERMES3    DB    'ERR READING FILE$'
+
+   XDP     DW  16000 DUP(0)           ; DICTIONARY
+
+   STACK   SEGMENT STACK              ; Стек параметров
+           DW  64 DUP (?)
+   XS0     LABEL   WORD
+           DW  0,0   ; STACK
+
+   STACK   ENDS
+   ARRAY      ENDS
+   END        $INI
